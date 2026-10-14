@@ -1,6 +1,6 @@
 ---
 name: askuserquestionweb
-argument-hint: [--port 5700] [--idle-close-sec 60]
+argument-hint: [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60]
 description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 .auq/outbox/，使用者在網頁點選 (支援 preview 分欄、Other 自填、備註、通知音效)，答案透過 Monitor 回到 Claude Code。當使用者說「啟動 askUserQuestion 網頁版」「askuserquestionweb」「網頁問答」「改用網頁回答問題」「在瀏覽器回答 AskUserQuestion」等情境時觸發；英文如 "start askUserQuestion Web"、"answer questions in the browser"、"ask me in the browser" 也觸發。使用者不在電腦前 (例：改用 Claude Code 手機 app) 時自動改回傳統 AskUserQuestion。
 ---
 
@@ -12,10 +12,12 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 
 1. **在目前專案根目錄背景執行**（Bash `run_in_background`，Node 依使用者指定的 nvm 環境）：
    ```bash
-   mkdir -p .auq && node <skill>/server.js [--port N] [--idle-close-sec N] >> .auq/server.log 2>&1
+   mkdir -p .auq && node <skill>/server.js [--port N] [--close-after-answer-sec N] [--idle-close-sec N] >> .auq/server.log 2>&1
    ```
    - port 預設 5700，被占用時自動往後找
-   - `--idle-close-sec`：最後一題結束後多久沒有新題目就關閉作答頁面（server 繼續待命），預設 60 秒
+   - `--close-after-answer-sec`：作答或略過後多久關閉作答頁面，預設 5 秒
+   - `--idle-close-sec`：頁面開著但還沒有題目時（剛自動開頁、server 重啟後重連）多久關閉，預設 60 秒
+   - 兩者關閉的都只是頁面，server 繼續待命
 2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，第一次使用時提醒按「🔔 啟用通知」（英文介面為「🔔 Enable alerts」）允許桌面通知，瀏覽器會記住，之後按鈕不再出現；提示音要點過頁面才會響；出現 `[AUQ:error]` 就回報原因
 3. **開始監看**（Monitor，`timeout_ms` 設最大值）：
    ```bash
@@ -85,7 +87,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
   ```bash
   curl -s -H "Origin: http://127.0.0.1:<port>" -d '{"id":"<id>","reason":"claude-reask"}' http://127.0.0.1:<port>/api/cancel
   ```
-- 最後一題結束後 `--idle-close-sec` 秒沒有新題目，server 會通知頁面斷線並嘗試關閉分頁（log 為 `[AUQ:idle-close]`，Monitor 不監看）；下次出題時 detect.mjs 會回 `open`
+- 作答或略過後 `--close-after-answer-sec` 秒（預設 5 秒），server 會通知頁面斷線並嘗試關閉分頁；連續出題時若超過這個時間才出下一題，頁面會先關閉再自動重開（log 為 `[AUQ:idle-close]`，Monitor 不監看）；下次出題時 detect.mjs 會回 `open`
 - 完整答案 (含結構化欄位) 存在 `.auq/inbox.jsonl`，以 id 查最後一筆即可；只追加不改寫
 - 同一時間可以有多組題目，答案依 id 對應
 

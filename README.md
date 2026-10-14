@@ -13,7 +13,7 @@ If you switch to the Claude Code mobile app, questions automatically go back to 
 - Questions and options as cards: pick one or several, type your own answer under "Other", or add a note
 - Side-by-side previews: compare layouts, components, or colors as real rendered HTML before choosing
 - A sound and a desktop notification when a new question arrives
-- The page opens by itself when Claude Code has a question, and closes itself after a minute of no new questions
+- The page opens by itself when Claude Code has a question, and closes itself 5 seconds after you answer
 - English and Traditional Chinese interface
 
 ## Install from GitHub
@@ -71,7 +71,7 @@ or just ask in plain words: "Start askUserQuestion Web".
 | Switch language | The "中文" / "EN" button at the top right |
 
 - The interface follows your browser language; once you switch, your choice is remembered
-- After you answer, the page closes itself if no new question comes within a minute. It reopens automatically for the next question
+- The page closes itself 5 seconds after you answer or skip, and reopens automatically for the next question
 
 ## When you're on your phone
 

@@ -1,5 +1,5 @@
 // askUserQuestion Web bridge server：Claude 把題目寫進 .auq/outbox/，瀏覽器作答後由 stdout 回報給 Claude Code
-// 用法：node server.js [--port 5700] [--idle-close-sec 60]
+// 用法：node server.js [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60]
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,7 +23,9 @@ const maxAskFile = 256 * 1024;
 const parseRetries = 5;
 // 頁面全部關閉多久後改回傳統 AskUserQuestion (頁面在背景不算，靠提示音與通知提醒)
 const noClientFallbackMs = 10 * 1000;
-// 最後一題結束後多久沒有新題目就通知頁面關閉 (server 繼續待命)
+// 頁面關閉時機 (server 繼續待命)：作答 / 略過後 Claude 已收到答案，短時間就關；
+// 頁面開著但還沒有題目 (剛自動開頁、server 重啟後重連) 要等 Claude 出題，給較長時間
+const closeAfterAnswerMs = Number(args.closeAfterAnswerSec || 5) * 1000;
 const idleCloseMs = Number(args.idleCloseSec || 60) * 1000;
 
 const mimeTypes = {
@@ -99,6 +101,7 @@ function parseArgs(list) {
   for (let i = 0; i < list.length; i++) {
     if (list[i] === '--port') result.port = list[++i];
     else if (list[i] === '--idle-close-sec') result.idleCloseSec = list[++i];
+    else if (list[i] === '--close-after-answer-sec') result.closeAfterAnswerSec = list[++i];
   }
   return result;
 }
@@ -276,19 +279,19 @@ function finishAsk(ask, status, extra) {
   }
   pendingAsks.delete(ask.id);
   broadcast('done', { id: ask.id, status });
-  if (!pendingAsks.size) scheduleIdleClose();
+  if (!pendingAsks.size) scheduleIdleClose(closeAfterAnswerMs);
   return true;
 }
 
-// 題目都結束後開始倒數，期間有新題目由 processAsk 取消
-function scheduleIdleClose() {
+// 沒有未答題目時倒數關閉頁面，期間有新題目由 processAsk 取消
+function scheduleIdleClose(delay) {
   clearTimeout(idleCloseTimer);
   idleCloseTimer = setTimeout(() => {
     idleCloseTimer = null;
     if (pendingAsks.size) return;
     broadcast('idle-close', {});
-    console.log(`[AUQ:idle-close] ${idleCloseMs / 1000} 秒沒有新題目，通知頁面關閉 (connected=${clients.size})`);
-  }, idleCloseMs);
+    console.log(`[AUQ:idle-close] ${delay / 1000} 秒沒有新題目，通知頁面關閉 (connected=${clients.size})`);
+  }, delay);
 }
 
 function oneLine(text) {
@@ -314,7 +317,7 @@ function visibleCount() {
 function presenceChanged() {
   if (visibleCount()) lastVisibleAt = new Date().toISOString();
   // 頁面開著卻沒有題目 (例：server 重啟後頁面自動重連) 也要倒數，否則頁面永遠不會關閉
-  if (clients.size && !pendingAsks.size && !idleCloseTimer) scheduleIdleClose();
+  if (clients.size && !pendingAsks.size && !idleCloseTimer) scheduleIdleClose(idleCloseMs);
   writePresence();
   updateFallback();
 }
