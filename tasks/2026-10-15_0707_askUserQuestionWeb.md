@@ -1,8 +1,20 @@
-# askUserQuestion 網頁版
+# askUserQuestion 網頁版（AUQW）
+
+> 歸檔時間：2026-10-15 07:07｜commits：ed2d2dc → 999d3c3（6 個）
+
+## 摘要
+- **成果**：把 AskUserQuestion 搬到瀏覽器作答，沿用 webToAgent 的「本機 Node server + stdout 標記 + Monitor」技術，方向反轉為 Claude 出題、使用者在網頁作答；已安裝為 skill `~/.claude/skills/askuserquestionweb`（`/askuserquestionweb`）
+- **出題**：Claude 寫 `.auq/outbox/<id>.json`（格式同 AskUserQuestion）→ SSE 推到頁面 → 作答後 stdout 印 `[AUQ] answer ...` 由 Monitor 回傳
+- **頁面功能**：單選 / 複選、Other 自填、備註、略過；`previewHtml`（sandbox iframe + tailwind / daisyUI）與純文字 `preview` 分欄預覽；提示音、桌面通知；最後一題結束 60 秒無新題自動關閉分頁
+- **桌機 / 手機判斷（detect.mjs）**：比較「桌機最後鍵盤滑鼠操作（macOS 閒置時間）」與「最後一則手機訊息（session 紀錄 `queueSkipSlashCommands: true`）」時間，較新者勝；在手機 → 傳統 AskUserQuestion，在桌機 → 依狀態 web / open（自動開頁）/ start（重啟 server）
+- **不採用**：頁面可見 / 頁面連線判斷（切到終端機、頁面由 Claude 開啟等誤判）、區網模式（安全考量，先不做）
+- **已知限制**：訊息來源是 Claude Code 內部欄位，改版可能失效；工作中插話與 AskUserQuestion 回答沒有來源欄位；server 只綁 127.0.0.1，手機無法開頁
 
 ## Plan（來自 plan.md）
 - 看一下 skill webToAgent
 - 用它的核心技術做出 askUserQuestion 的網頁版
+
+## 詳細紀錄
 
 ## webToAgent 核心技術拆解
 | 技術 | webToAgent 的用法 | 本專案的對應用法 |
