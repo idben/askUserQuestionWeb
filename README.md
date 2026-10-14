@@ -82,6 +82,12 @@ The answer page only runs on your computer, so it can't be opened from your phon
 
 Keyboard and mouse activity can only be read on macOS. On other systems, Claude Code decides by where your latest message came from.
 
+## Why some questions come back to the terminal
+
+For actions that change something outside your computer, such as `git push`, writing to a database, or deleting remote data, Claude Code doesn't accept an answer from the web page as your approval, because answers from the page reach Claude Code as background notifications. In those cases Claude Code asks again in the terminal and mentions what you already chose on the page.
+
+You can change this. If you pre-approve specific actions in your `CLAUDE.md` (for example: "Pushing to my own GitHub repos doesn't need confirmation"), Claude Code usually won't stop to ask about them at all. Everything else stays on the answer page.
+
 ## Security
 
 - Runs only on your computer (`127.0.0.1`), never exposed to the network or other devices
