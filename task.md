@@ -31,7 +31,7 @@
   - 測試中修正：選項的 data-preview 與預覽區選擇器撞名；SSE done 事件比 fetch 回應先到導致誤顯示「其他分頁作答」
   - 未驗證：提示音與桌面通知（headless 瀏覽器無法確認）；headless 截圖中 preview 方框字元對不齊，需在實際 Chrome 確認
 - [x] 5. `scripts/install-skill.sh`：把 server.js、public/、SKILL.md 複製到 `~/.claude/skills/askuserquestionweb`
-  - 已用暫時 HOME 驗證，尚未安裝到實際的 ~/.claude/skills
+  - 已用暫時 HOME 驗證，並已安裝到 ~/.claude/skills/askuserquestionweb
 - [x] 6. README.md + git commit
 
 ## 新增需求：手機 app 自動改回傳統 AskUserQuestion
@@ -40,6 +40,45 @@ Claude 無法直接得知使用者用哪個裝置，改用「桌面頁面是否�
 - [x] 8. 出題前判斷：SKILL.md 規定 Claude 先讀 `.auq/presence.json`（或 server 未啟動），沒有可見分頁 → 直接用傳統 AskUserQuestion
 - [x] 9. 出題後保險：題目送出後 15 秒內沒有可見分頁，server 自動取消該題並印 `[AUQ] fallback <id>`，Claude 收到後改用傳統 AskUserQuestion 重問
   - 實作差異：沒有頁面時 10 秒 fallback；頁面開著但在背景時給 `--fallback-sec`（預設 60 秒），讓提示音和通知有機會提醒；server 結束時 presence.json 寫入 `running: false`
+
+## 試用回饋（2026-10-15，網頁作答 test1）
+- 結果：preview 方框字元在實際 Chrome 有對齊；提示音與桌面通知未出現（頁面未點擊過，音效被自動播放政策擋下；頁面在前景時本來就不跳通知）
+- [x] 10. SKILL.md 啟動步驟加上：`[AUQ:ready]` 後執行 `open <網址>` 自動開啟頁面（使用者已選擇）
+- [x] 11. ~~提示音未解鎖時顯示提示列~~：使用者選擇維持現狀（保留「🔔 啟用通知」按鈕）；桌面通知維持「頁面不是焦點時」才跳
+- [x] 12. preview 改用 HTML 呈現（使用者回饋：中文 / emoji 混在方框字元中仍對不齊）
+  - 題目選項新增 `previewHtml` 欄位，用 `<iframe sandbox srcdoc>` 呈現，與主頁面隔離（樣式不互相影響、無法存取主頁面）
+  - 保留原本的 `preview`（純文字），與 AskUserQuestion 格式相容，fallback 回傳統 AskUserQuestion 時可直接沿用
+  - iframe 高度依內容自動調整，上限 24rem
+  - SKILL.md 說明兩種 preview 的使用時機與 HTML 撰寫規範
+  - 決定：新增 `previewHtml`；iframe `sandbox="allow-scripts"`（無 same-origin）並載入 tailwind + daisyUI
+  - 結果：使用者在實際 Chrome 確認預覽正常、切換正常（test3）
+
+- [x] 13. 改進「是否在電腦前」判斷（使用者回饋：頁面不在前景就改回 AskUserQuestion 不好，在電腦前切去終端機也會被誤判）
+  - 使用者希望能精準偵測「手機 app / 非手機 app」，閒置時間、螢幕鎖定、手動切換等間接訊號暫緩
+  - 調查結果：
+    - 環境變數只有 `CLAUDE_CODE_ENTRYPOINT=cli`、`CLAUDE_CODE_BRIDGE_SESSION_ID`（Remote Control 橋接已開），沒有「目前是否有手機連線」的資訊
+    - `~/.claude/sessions/<pid>.json` 只有 bridgeSessionId，沒有遠端連線狀態
+    - session 紀錄 (`~/.claude/projects/<專案>/<sessionId>.jsonl`) 每則使用者訊息有 `origin`、`promptSource`、`entrypoint` 欄位；目前終端機打字的訊息為 `origin.kind=human`、`promptSource=typed`
+  - 實測（2026-10-15 手機 app 送出一則訊息，Claude 閒置時）：
+    | 來源 | promptSource | queueSkipSlashCommands | 寫入方式 |
+    |------|-------------|------------------------|---------|
+    | 終端機（閒置時輸入） | typed | 無 | 直接成為 user 紀錄 |
+    | 終端機（工作中插話） | — | — | queue-operation + attachment(queued_command)，無來源欄位 |
+    | 手機 app（閒置時） | queued | true | queue-operation enqueue 後成為 user 紀錄 |
+  - 判讀：`queueSkipSlashCommands: true` 是目前唯一能區分手機訊息的欄位（遠端輸入不解析 slash command）
+  - 限制：只有 1 筆樣本；工作中插話的訊息（不論手機或終端機）都沒有來源欄位；這些是 Claude Code 內部欄位，沒有官方文件，改版可能失效
+  - 原規劃：請使用者從手機 app 送一則訊息，比對欄位是否不同（已完成）
+  - 追加發現：AskUserQuestion 的回答（tool_result）沒有任何來源欄位；使用者在手機被問、回桌機作答時，「最後訊息來源」會停在手機而誤判
+  - 修正方案（兩訊號互補，閒置時間只當「在電腦前」的正向證據）：
+    1. 頁面沒開 → 傳統
+    2. 系統閒置 < 60 秒 → 網頁（不論頁面是否在前景）
+    3. 最後一則人類訊息 `queueSkipSlashCommands: true`（手機）→ 傳統
+    4. 其他 → 網頁
+  - 出題後：只在「頁面關閉」時 fallback；移除「背景 60 秒 fallback」
+  - 實作：新增 `detect.mjs`（改用 Node，避免 Python 環境；輸出 web / classic 與原因），SKILL.md 出題前執行；server 只在頁面全關 10 秒 fallback，presence.json 加 pid；SKILL.md 加入 Claude 撤回網頁題目（`/api/cancel` reason=claude-reask）
+  - 驗證：工作中從手機、桌機各插話一次，紀錄格式相同，證實需要閒置時間訊號；detect.mjs 實測輸出 `web :: 系統閒置 0 秒`
+    - 若不同：出題前讀 session 紀錄，**依最後一則使用者訊息的來源**決定（手機 → 傳統 AskUserQuestion，電腦 → 網頁），取代頁面可見判斷
+    - 若相同：回到間接訊號方案再討論
 
 ## 安全（ISO27001 考量）
 - 只綁 `127.0.0.1`；`/api/answer` 檢查 Origin；出題只能透過本機檔案系統（網頁無法偽造題目）；題目 JSON 大小與欄位長度設上限

@@ -8,6 +8,15 @@ const tplQuestion = document.querySelector('[data-tpl-question]');
 const tplOption = document.querySelector('[data-tpl-option]');
 const tplDone = document.querySelector('[data-tpl-done]');
 const otherValue = '__other__';
+const previewHead = [
+  '<meta charset="utf-8">',
+  '<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">',
+  '<script src="https://cdn.tailwindcss.com/3.4.16"></script>',
+  '<style>html,body{margin:0;background:transparent}body{padding:12px}</style>'
+].join('');
+// 回報內容高度給主頁面，iframe 才能依內容調整高度
+const previewFoot = '<script>new ResizeObserver(() => parent.postMessage({ auqPreviewHeight: document.documentElement.scrollHeight }, "*")).observe(document.documentElement);</script>';
+const previewMaxHeight = 480;
 const cid = getClientId();
 const pendingForms = new Map();
 let audioCtx = null;
@@ -19,6 +28,7 @@ notifyBtn.addEventListener('click', enableNotify);
 // 瀏覽器要求使用者互動後才能播放聲音，第一次點擊頁面就解鎖
 document.addEventListener('pointerdown', unlockAudio, { once: true });
 document.addEventListener('visibilitychange', sendPresence);
+window.addEventListener('message', resizePreview);
 
 // ---------- functions ----------
 
@@ -100,9 +110,9 @@ function renderQuestion(askId, q, qi) {
 
   const optionsBox = fieldset.querySelector('[data-options]');
   for (const opt of q.options) {
-    optionsBox.append(renderOption({ type, name, value: opt.label, label: opt.label, desc: opt.description, preview: opt.preview }));
+    optionsBox.append(renderOption({ type, name, value: opt.label, label: opt.label, desc: opt.description }));
   }
-  const otherOpt = renderOption({ type, name, value: otherValue, label: 'Other', desc: '以上都不是，自行輸入', preview: '' });
+  const otherOpt = renderOption({ type, name, value: otherValue, label: 'Other', desc: '以上都不是，自行輸入' });
   const otherText = document.createElement('textarea');
   otherText.className = 'textarea textarea-bordered w-full hidden';
   otherText.rows = 2;
@@ -116,18 +126,17 @@ function renderQuestion(askId, q, qi) {
     if (checked && document.activeElement !== otherText) otherText.focus();
   });
 
-  if (q.options.some((o) => o.preview)) setupPreview(fieldset, q);
+  if (q.options.some(hasPreview)) setupPreview(fieldset, q);
   return fieldset;
 }
 
-function renderOption({ type, name, value, label, desc, preview }) {
+function renderOption({ type, name, value, label, desc }) {
   const el = tplOption.content.firstElementChild.cloneNode(true);
   const input = el.querySelector('[data-input]');
   input.type = type;
   input.name = name;
   input.value = value;
   input.className = `${type === 'radio' ? 'radio' : 'checkbox'} radio-primary checkbox-primary mt-1 shrink-0`;
-  el.dataset.previewText = preview || '';
   el.dataset.label = label;
   el.querySelector('[data-opt-label]').textContent = label;
   const descEl = el.querySelector('[data-opt-desc]');
@@ -136,7 +145,12 @@ function renderOption({ type, name, value, label, desc, preview }) {
   return el;
 }
 
+function hasPreview(opt) {
+  return Boolean(opt.previewHtml || opt.preview);
+}
+
 // 有 preview 時左右分欄：滑過或聚焦的選項優先，其次是已勾選的，最後是第一個有 preview 的
+// previewHtml 優先於純文字 preview；每個選項一個 iframe，切換時不用重新載入 tailwind
 function setupPreview(fieldset, q) {
   const body = fieldset.querySelector('.auq-body');
   const pane = fieldset.querySelector('[data-preview]');
@@ -145,22 +159,46 @@ function setupPreview(fieldset, q) {
   const options = [...fieldset.querySelectorAll('.auq-option')];
   body.classList.add('has-preview');
   pane.classList.remove('hidden');
-
-  const show = (opt) => {
-    const target = opt && opt.dataset.previewText ? opt : null;
-    const fallback = options.find((o) => o.querySelector('input').checked && o.dataset.previewText)
-      || options.find((o) => o.dataset.label === q.options.find((x) => x.preview).label);
-    const current = target || fallback;
-    labelEl.textContent = `預覽：${current.dataset.label}`;
-    box.textContent = current.dataset.previewText;
-  };
-  for (const opt of options) {
-    opt.addEventListener('pointerenter', () => show(opt));
-    opt.addEventListener('focusin', () => show(opt));
+  const frames = q.options.map((opt) => (opt.previewHtml ? createPreviewFrame(opt.previewHtml) : null));
+  for (const frame of frames) {
+    if (frame) pane.append(frame);
   }
-  fieldset.querySelector('[data-options]').addEventListener('pointerleave', () => show(null));
-  fieldset.addEventListener('change', () => show(null));
-  show(null);
+
+  const show = (index) => {
+    const target = index >= 0 && q.options[index] && hasPreview(q.options[index]) ? index : -1;
+    const checked = options.findIndex((o, i) => o.querySelector('input').checked && q.options[i] && hasPreview(q.options[i]));
+    const current = target >= 0 ? target : checked >= 0 ? checked : q.options.findIndex(hasPreview);
+    const opt = q.options[current];
+    labelEl.textContent = `預覽：${opt.label}`;
+    frames.forEach((frame, i) => frame && frame.classList.toggle('hidden', i !== current));
+    box.classList.toggle('hidden', Boolean(opt.previewHtml));
+    box.textContent = opt.previewHtml ? '' : opt.preview;
+  };
+  options.forEach((opt, i) => {
+    opt.addEventListener('pointerenter', () => show(i));
+    opt.addEventListener('focusin', () => show(i));
+  });
+  fieldset.querySelector('[data-options]').addEventListener('pointerleave', () => show(-1));
+  fieldset.addEventListener('change', () => show(-1));
+  show(-1);
+}
+
+// sandbox 只給 allow-scripts、不給 allow-same-origin：預覽可用 tailwind，但無法存取主頁面、cookie 與 API
+function createPreviewFrame(html) {
+  const frame = document.createElement('iframe');
+  frame.className = 'auq-preview-frame hidden';
+  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  frame.title = '選項預覽';
+  frame.srcdoc = `<!doctype html><html data-theme="corporate"><head>${previewHead}</head><body>${html}${previewFoot}</body></html>`;
+  return frame;
+}
+
+function resizePreview(e) {
+  const height = e.data && Number(e.data.auqPreviewHeight);
+  if (!height) return;
+  const frame = [...document.querySelectorAll('.auq-preview-frame')].find((f) => f.contentWindow === e.source);
+  if (frame) frame.style.height = `${Math.min(Math.ceil(height), previewMaxHeight)}px`;
 }
 
 function collectAnswers(form) {

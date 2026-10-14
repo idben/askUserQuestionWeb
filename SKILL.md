@@ -1,22 +1,21 @@
 ---
 name: askuserquestionweb
-argument-hint: [--port 5700] [--fallback-sec 60]
+argument-hint: [--port 5700]
 description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 .auq/outbox/，使用者在網頁點選 (支援 preview 分欄、Other 自填、備註、通知音效)，答案透過 Monitor 回到 Claude Code。當使用者說「啟動 askUserQuestion 網頁版」「askuserquestionweb」「網頁問答」「改用網頁回答問題」「在瀏覽器回答 AskUserQuestion」等情境時觸發。使用者不在電腦前 (例：改用 Claude Code 手機 app) 時自動改回傳統 AskUserQuestion。
 ---
 
 # askUserQuestion Web：瀏覽器作答 → Claude Code
 
-本 skill 所在路徑（下稱 `<skill>`）即為安裝資料夾，`server.js` 與 `public/` 都在這裡。所有指令用 `<skill>/server.js` 組出路徑，不要寫死。
+本 skill 所在路徑（下稱 `<skill>`）即為安裝資料夾，`server.js`、`detect.mjs` 與 `public/` 都在這裡。所有指令用 `<skill>/server.js` 組出路徑，不要寫死。
 
 ## 啟動
 
 1. **在目前專案根目錄背景執行**（Bash `run_in_background`，Node 依使用者指定的 nvm 環境）：
    ```bash
-   mkdir -p .auq && node <skill>/server.js [--port N] [--fallback-sec N] >> .auq/server.log 2>&1
+   mkdir -p .auq && node <skill>/server.js [--port N] >> .auq/server.log 2>&1
    ```
    - port 預設 5700，被占用時自動往後找
-   - `--fallback-sec`：頁面開著但不在前景多久後改回傳統 AskUserQuestion，預設 60 秒
-2. **確認啟動**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址交給使用者，請他開啟並按「🔔 啟用通知」；出現 `[AUQ:error]` 就回報原因
+2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，提醒按「🔔 啟用通知」（瀏覽器要求點過頁面才能播放提示音）；出現 `[AUQ:error]` 就回報原因
 3. **開始監看**（Monitor，`timeout_ms` 設最大值）：
    ```bash
    tail -n 0 -f .auq/server.log | grep -E --line-buffered "^\[AUQ\]|\[AUQ:error\]"
@@ -28,9 +27,15 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 
 啟動後，凡是原本要呼叫 AskUserQuestion 的時機，依下列順序處理：
 
-1. **先判斷使用者是否在電腦前**：讀 `.auq/presence.json`
-   - `running` 為 true 且 `visible` ≥ 1 → 用網頁出題（第 2 步）
-   - 檔案不存在、`running` 為 false、`visible` 為 0（頁面沒開、在背景，或使用者改用手機 app）→ **直接用傳統 AskUserQuestion**，不寫 outbox
+1. **先判斷出題方式**：在專案根目錄執行 `node <skill>/detect.mjs`，輸出 `web :: <原因>` 或 `classic :: <原因>`
+   - `web` → 用網頁出題（第 2 步）
+   - `classic` → **直接用傳統 AskUserQuestion**，不寫 outbox
+   - 判斷順序（任一成立即決定）：
+     1. 作答頁面沒開或 server 未執行 → classic
+     2. 系統閒置 < 60 秒（剛動過鍵盤滑鼠，`--idle-sec` 可調）→ web，頁面在背景也一樣，靠提示音與通知提醒
+     3. 最後一則使用者訊息來自手機 app（session 紀錄中 `queueSkipSlashCommands: true`）→ classic
+     4. 其他 → web
+   - 限制：工作中插話與 AskUserQuestion 的回答沒有來源欄位，只能靠閒置時間；訊息來源是 Claude Code 內部欄位，改版可能失效
 2. **寫入題目**：用 Write 建立 `.auq/outbox/<簡短英文 id>.json`，格式與 AskUserQuestion 的 `questions` 相同：
    ```json
    {
@@ -40,14 +45,23 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
          "question": "首頁要用哪種版面配置？",
          "multiSelect": false,
          "options": [
-           { "label": "左右分欄 (Recommended)", "description": "側欄導覽 + 主內容", "preview": "┌────┬────────┐\n│Nav │Content │\n└────┴────────┘" },
+           {
+             "label": "左右分欄 (Recommended)",
+             "description": "側欄導覽 + 主內容",
+             "preview": "Nav | Content",
+             "previewHtml": "<div class=\"flex gap-2 h-32\"><nav class=\"w-1/4 bg-primary/20 rounded p-2\">Nav</nav><main class=\"flex-1 bg-base-200 rounded p-2\">Content</main></div>"
+           },
            { "label": "上下堆疊", "description": "頂部導覽列" }
          ]
        }
      ]
    }
    ```
-   - 1～4 題，每題 2～4 個選項，`label` 不可重複；`preview` 選填（有的話頁面會左右分欄顯示）
+   - 1～4 題，每題 2～4 個選項，`label` 不可重複
+   - 預覽（選填，有的話頁面會左右分欄顯示）：
+     - `previewHtml`：**網頁優先顯示這個**。HTML 片段（不含 `<html>`、`<head>`），放在 sandbox iframe 中呈現，已載入 tailwind + daisyUI（主題 corporate），可直接用 class；適合版面、元件、配色等視覺比較
+     - `preview`：純文字（等寬字型），與 AskUserQuestion 相容；有 `previewHtml` 時也建議附上簡短的文字版，fallback 回傳統 AskUserQuestion 時會用到
+     - iframe 無法存取主頁面，不要在 previewHtml 中放機敏資料或外部追蹤資源
    - 不用自己加 Other，頁面每題都會附 Other 自填與備註
    - id 只用英數、`-`、`_`；重複時 server 會自動加後綴
 3. 寫入後告訴使用者「題目已送到網頁」，**結束這一輪回覆等待 Monitor 通知**，不要輪詢
@@ -57,9 +71,14 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 |------|------|------|
 | `[AUQ] answer <id> N questions` + 每題一行 `Q1 [header] 題目 => 答案 \| 備註: ...` | 使用者已作答 | 當成 AskUserQuestion 的回答繼續工作；`Other: ...` 是自填答案 |
 | `[AUQ] cancel <id>` | 使用者按「略過」 | 等同拒絕回答，依情境用預設做法或在對話中詢問 |
-| `[AUQ] fallback <id> :: <原因>` | 頁面沒開或長時間不在前景（例：使用者改用手機 app） | **立即用傳統 AskUserQuestion 重問同一組題目** |
+| `[AUQ] cancel <id> :: claude-reask` | Claude 自己撤回（見下方） | 忽略 |
+| `[AUQ] fallback <id> :: <原因>` | 作答頁面全部關閉超過 10 秒 | **立即用傳統 AskUserQuestion 重問同一組題目**（previewHtml 改用 preview 文字版） |
 | `[AUQ:error] <檔名> :: <原因>` | 題目格式錯誤（檔案已移到 `.auq/processed/*.invalid.json`） | 修正後用新檔名重寫 |
 
+- **題目已送到網頁，但使用者從手機傳訊息來**（例：「我在手機」「看不到題目」），或在等待中重新執行 detect.mjs 得到 `classic`：撤回網頁題目後用傳統 AskUserQuestion 重問（port 取自 `[AUQ:ready]` 那一行）：
+  ```bash
+  curl -s -H "Origin: http://127.0.0.1:<port>" -d '{"id":"<id>","reason":"claude-reask"}' http://127.0.0.1:<port>/api/cancel
+  ```
 - 完整答案 (含結構化欄位) 存在 `.auq/inbox.jsonl`，以 id 查最後一筆即可；只追加不改寫
 - 同一時間可以有多組題目，答案依 id 對應
 

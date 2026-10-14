@@ -1,5 +1,5 @@
 // askUserQuestion Web bridge server：Claude 把題目寫進 .auq/outbox/，瀏覽器作答後由 stdout 回報給 Claude Code
-// 用法：node server.js [--port 5700] [--fallback-sec 60]
+// 用法：node server.js [--port 5700]
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,9 +21,8 @@ const presenceFile = path.join(dataDir, 'presence.json');
 const maxBody = 64 * 1024;
 const maxAskFile = 256 * 1024;
 const parseRetries = 5;
-// 沒有開著的頁面時多快改回傳統 AskUserQuestion；頁面開著但在背景時，給通知音效一點時間
+// 頁面全部關閉多久後改回傳統 AskUserQuestion (頁面在背景不算，靠提示音與通知提醒)
 const noClientFallbackMs = 10 * 1000;
-const hiddenFallbackMs = Number(args.fallbackSec || 60) * 1000;
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -96,7 +95,6 @@ function parseArgs(list) {
   const result = {};
   for (let i = 0; i < list.length; i++) {
     if (list[i] === '--port') result.port = list[++i];
-    else if (list[i] === '--fallback-sec') result.fallbackSec = list[++i];
   }
   return result;
 }
@@ -193,7 +191,12 @@ function toAsk(data) {
       const label = pickText(opt && opt.label, 100);
       if (!label) return { error: `${no}有選項缺少 label` };
       if (cleanOptions.some((o) => o.label === label)) return { error: `${no}的選項 label 重複：${label}` };
-      cleanOptions.push({ label, description: pickText(opt.description, 500) || '', preview: pickText(opt.preview, 4000, false) || '' });
+      cleanOptions.push({
+        label,
+        description: pickText(opt.description, 500) || '',
+        preview: pickText(opt.preview, 4000, false) || '',
+        previewHtml: pickText(opt.previewHtml, 20000, false) || ''
+      });
     }
     questions.push({ header: pickText(q.header, 30) || `Q${i + 1}`, question, multiSelect: q.multiSelect === true, options: cleanOptions });
   }
@@ -296,9 +299,9 @@ function presenceChanged() {
   updateFallback();
 }
 
-// presence.json 讓 Claude 出題前判斷使用者是否在電腦前 (例：改用手機 app 時頁面不會是可見狀態)
+// presence.json 讓 detect.mjs 出題前確認 server 執行中且有頁面連線
 function writePresence(running = true) {
-  const data = { running, port, visible: visibleCount(), connected: clients.size, lastVisibleAt, updatedAt: new Date().toISOString() };
+  const data = { running, pid: process.pid, port, visible: visibleCount(), connected: clients.size, lastVisibleAt, updatedAt: new Date().toISOString() };
   try {
     fs.writeFileSync(presenceFile, JSON.stringify(data, null, 2) + '\n');
   } catch {
@@ -306,23 +309,22 @@ function writePresence(running = true) {
   }
 }
 
-// 有未作答題目卻沒有可見頁面時倒數，時間到就取消題目，請 Claude 改用傳統 AskUserQuestion
+// 有未作答題目卻沒有任何頁面連線時倒數，時間到就取消題目，請 Claude 改用傳統 AskUserQuestion
 function updateFallback() {
-  if (!pendingAsks.size || visibleCount()) {
+  if (!pendingAsks.size || clients.size) {
     clearTimeout(fallbackTimer);
     fallbackTimer = null;
     return;
   }
   if (fallbackTimer) return;
-  const delay = clients.size ? hiddenFallbackMs : noClientFallbackMs;
   fallbackTimer = setTimeout(() => {
     fallbackTimer = null;
-    if (visibleCount()) return;
-    const reason = clients.size ? `頁面 ${delay / 1000} 秒未在前景` : '沒有開著的頁面';
+    if (clients.size) return;
+    const reason = '沒有開著的頁面';
     for (const ask of [...pendingAsks.values()]) {
       if (finishAsk(ask, 'fallback', { reason })) console.log(`[AUQ] fallback ${ask.id} :: ${reason}，請改用傳統 AskUserQuestion`);
     }
-  }, delay);
+  }, noClientFallbackMs);
 }
 
 function handleEvents(req, res, url) {
