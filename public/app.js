@@ -20,6 +20,7 @@ const previewMaxHeight = 480;
 const cid = getClientId();
 const pendingForms = new Map();
 let audioCtx = null;
+let source = null;
 
 refreshNotifyBtn();
 connect();
@@ -33,7 +34,7 @@ window.addEventListener('message', resizePreview);
 // ---------- functions ----------
 
 function connect() {
-  const source = new EventSource(`/events?cid=${cid}&visible=${isVisible() ? 1 : 0}`);
+  source = new EventSource(`/events?cid=${cid}&visible=${isVisible() ? 1 : 0}`);
   source.addEventListener('open', () => {
     setConn('已連線', 'badge-success');
     // 重連時網址上的 visible 可能已過時，連上後再回報一次
@@ -67,6 +68,33 @@ function connect() {
     const titles = { answered: '已在其他分頁作答', cancelled: '已略過', fallback: '已改回終端機的 AskUserQuestion' };
     showDone(form, '↪️', titles[status] || '已結束', []);
   });
+  // 閒置太久：先斷線讓 server 知道頁面已離開，再嘗試關閉分頁
+  source.addEventListener('idle-close', closeForIdle);
+}
+
+function closeForIdle() {
+  source.close();
+  window.close();
+  // 瀏覽器不允許關閉時 (分頁不是由腳本開啟)，改顯示提示
+  setTimeout(() => {
+    setConn('已閒置關閉', 'badge-ghost');
+    asksBox.replaceChildren();
+    pendingForms.clear();
+    emptyBox.replaceChildren();
+    const icon = document.createElement('div');
+    icon.className = 'text-5xl';
+    icon.textContent = '💤';
+    const text = document.createElement('p');
+    text.className = 'text-base-content/70';
+    text.textContent = '閒置一段時間沒有新問題，頁面已停止連線，可以關閉此分頁';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-outline mt-2';
+    btn.type = 'button';
+    btn.textContent = '重新連線';
+    btn.addEventListener('click', () => location.reload());
+    emptyBox.append(icon, text, btn);
+    updateState();
+  }, 300);
 }
 
 function renderAsk(ask) {

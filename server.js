@@ -1,5 +1,5 @@
 // askUserQuestion Web bridge server：Claude 把題目寫進 .auq/outbox/，瀏覽器作答後由 stdout 回報給 Claude Code
-// 用法：node server.js [--port 5700]
+// 用法：node server.js [--port 5700] [--idle-close-sec 60]
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,6 +23,8 @@ const maxAskFile = 256 * 1024;
 const parseRetries = 5;
 // 頁面全部關閉多久後改回傳統 AskUserQuestion (頁面在背景不算，靠提示音與通知提醒)
 const noClientFallbackMs = 10 * 1000;
+// 最後一題結束後多久沒有新題目就通知頁面關閉 (server 繼續待命)
+const idleCloseMs = Number(args.idleCloseSec || 60) * 1000;
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -37,6 +39,7 @@ const pendingAsks = new Map();
 const watchTimers = new Map();
 const clients = new Map();
 let fallbackTimer = null;
+let idleCloseTimer = null;
 let lastVisibleAt = null;
 
 fs.mkdirSync(outboxDir, { recursive: true });
@@ -95,6 +98,7 @@ function parseArgs(list) {
   const result = {};
   for (let i = 0; i < list.length; i++) {
     if (list[i] === '--port') result.port = list[++i];
+    else if (list[i] === '--idle-close-sec') result.idleCloseSec = list[++i];
   }
   return result;
 }
@@ -160,6 +164,8 @@ function processAsk(name, attempt) {
     return console.error(`[AUQ:error] ${name} :: 寫入失敗 ${err.message}`);
   }
   pendingAsks.set(id, record);
+  clearTimeout(idleCloseTimer);
+  idleCloseTimer = null;
   broadcast('ask', publicAsk(record));
   console.log(`[AUQ:asked] ${id} ${record.questions.length} questions  visible=${visibleCount()} connected=${clients.size}`);
   updateFallback();
@@ -270,7 +276,19 @@ function finishAsk(ask, status, extra) {
   }
   pendingAsks.delete(ask.id);
   broadcast('done', { id: ask.id, status });
+  if (!pendingAsks.size) scheduleIdleClose();
   return true;
+}
+
+// 題目都結束後開始倒數，期間有新題目由 processAsk 取消
+function scheduleIdleClose() {
+  clearTimeout(idleCloseTimer);
+  idleCloseTimer = setTimeout(() => {
+    idleCloseTimer = null;
+    if (pendingAsks.size) return;
+    broadcast('idle-close', {});
+    console.log(`[AUQ:idle-close] ${idleCloseMs / 1000} 秒沒有新題目，通知頁面關閉 (connected=${clients.size})`);
+  }, idleCloseMs);
 }
 
 function oneLine(text) {
