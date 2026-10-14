@@ -4,6 +4,19 @@
   padding: 1.5rem 1rem 4rem;
 }
 
+/* 主題的 success / error 色配深色字對比不足，改用深色底白字 */
+.auq-badge-ok {
+  background-color: #15803d;
+  border-color: #15803d;
+  color: #fff;
+}
+
+.auq-badge-error {
+  background-color: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
 .auq-empty {
   display: flex;
   flex-direction: column;

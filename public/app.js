@@ -42,11 +42,11 @@ window.addEventListener('message', resizePreview);
 function connect() {
   source = new EventSource(`/events?cid=${cid}&visible=${isVisible() ? 1 : 0}`);
   source.addEventListener('open', () => {
-    setConn('connected', 'badge-success');
+    setConn('connected', 'auq-badge-ok');
     // 重連時網址上的 visible 可能已過時，連上後再回報一次
     sendPresence();
   });
-  source.addEventListener('error', () => setConn('disconnected', 'badge-error'));
+  source.addEventListener('error', () => setConn('disconnected', 'auq-badge-error'));
   source.addEventListener('snapshot', (e) => {
     const asks = JSON.parse(e.data);
     const ids = new Set(asks.map((a) => a.id));
