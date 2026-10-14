@@ -377,9 +377,10 @@ async function enableNotify() {
   beep();
 }
 
+// 通知權限跟著網址記住，回應過一次 (允許或拒絕) 就不再顯示按鈕；頁面每次重開都要點過才有提示音，不靠這顆按鈕
 function refreshNotifyBtn() {
-  const granted = !('Notification' in window) || Notification.permission !== 'default';
-  notifyBtn.classList.toggle('hidden', granted && audioCtx !== null);
+  const answered = !('Notification' in window) || Notification.permission !== 'default';
+  notifyBtn.classList.toggle('hidden', answered);
 }
 
 function unlockAudio() {

@@ -52,7 +52,7 @@ scripts/install-skill.sh
 或直接說「啟動 askUserQuestion 網頁版」。
 
 - Claude Code 會在背景啟動一個本機小伺服器，並在瀏覽器打開作答頁面
-- 先按一次「🔔 啟用通知」，頁面才能播放提示音、顯示通知（瀏覽器規定要點過頁面才能出聲）
+- 第一次使用時按「🔔 啟用通知」允許桌面通知，瀏覽器會記住；點過頁面任一處之後，新題目也會有提示音
 - 之後 Claude Code 每次要問你問題，題目都會出現在頁面上
 - 用完說「結束 askUserQuestion 網頁版」，Claude Code 就會改回在終端機提問
 - 答案存在專案的 `.auq/` 資料夾，建議加進 `.gitignore`（Claude Code 會詢問是否幫你加）

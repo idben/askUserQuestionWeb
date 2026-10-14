@@ -52,7 +52,7 @@ In your project, type:
 or just ask in plain words: "Start askUserQuestion Web".
 
 - Claude Code starts a small local server in the background and opens the answer page in your browser
-- Click "🔔 Enable alerts" once so the page can play a sound and show notifications (browsers only allow sound after you click the page)
+- Click "🔔 Enable alerts" the first time to allow desktop notifications; the browser remembers it. A sound also plays for new questions once you've clicked anywhere on the page
 - From then on, whenever Claude Code would ask you something, the question shows up on the page
 - Say "stop askUserQuestion Web" when you're done; Claude Code goes back to asking in the terminal
 - Answers are stored in the project's `.auq/` folder; adding it to `.gitignore` is recommended (Claude Code offers to do this)

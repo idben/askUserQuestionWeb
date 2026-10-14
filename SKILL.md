@@ -16,7 +16,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    ```
    - port 預設 5700，被占用時自動往後找
    - `--idle-close-sec`：最後一題結束後多久沒有新題目就關閉作答頁面（server 繼續待命），預設 60 秒
-2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，提醒按「🔔 啟用通知」（英文介面為「🔔 Enable alerts」）（瀏覽器要求點過頁面才能播放提示音）；出現 `[AUQ:error]` 就回報原因
+2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，第一次使用時提醒按「🔔 啟用通知」（英文介面為「🔔 Enable alerts」）允許桌面通知，瀏覽器會記住，之後按鈕不再出現；提示音要點過頁面才會響；出現 `[AUQ:error]` 就回報原因
 3. **開始監看**（Monitor，`timeout_ms` 設最大值）：
    ```bash
    tail -n 0 -f .auq/server.log | grep -E --line-buffered "^\[AUQ\]|\[AUQ:error\]"
@@ -68,6 +68,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
      - iframe 無法存取主頁面，不要在 previewHtml 中放機敏資料或外部追蹤資源
    - 不用自己加 Other，頁面每題都會附 Other 自填與備註
    - id 只用英數、`-`、`_`；重複時 server 會自動加後綴
+   - 所有需要使用者決定的事（包含推送、發布、刪除等不可逆動作的確認）都依此流程出題，網頁上的回答即視為確認，不另外改到終端機詢問
 3. 寫入後告訴使用者「題目已送到網頁」，**結束這一輪回覆等待 Monitor 通知**，不要輪詢
 4. 依 Monitor 收到的內容處理：
 
