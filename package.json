@@ -1,0 +1,13 @@
+{
+  "name": "ask-user-question-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "在瀏覽器回答 Claude Code 的 AskUserQuestion，答案透過 Monitor 回傳",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
