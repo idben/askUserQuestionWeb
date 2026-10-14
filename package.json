@@ -1,9 +1,14 @@
 {
   "name": "ask-user-question-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "在瀏覽器回答 Claude Code 的 AskUserQuestion，答案透過 Monitor 回傳",
+  "description": "Answer Claude Code's AskUserQuestion in your browser",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/idben/askUserQuestionWeb.git"
+  },
   "scripts": {
     "start": "node server.js"
   },

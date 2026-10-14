@@ -1,68 +1,95 @@
 # askUserQuestion Web
 
-在瀏覽器回答 Claude Code 的 AskUserQuestion。沿用 webToAgent skill 的核心技術：本機 Node bridge server + stdout 標記行 + Claude Code Monitor 監看，方向反轉為「Claude 出題 → 使用者在網頁作答」。
+English | [繁體中文](README.zh-TW.md)
 
-## 特色
-- 題目格式與 AskUserQuestion 相同（1～4 題、每題 2～4 個選項、單選 / 複選）
-- 選項有 `previewHtml`（HTML，可用 tailwind）或 `preview`（純文字）時左右分欄預覽（手機上下堆疊）
-- 每題自動附 Other 自填與備註
-- 新題目到達時發出提示音與桌面通知
-- **使用者不在電腦前時自動改回傳統 AskUserQuestion**（例：改用 Claude Code 手機 app）
+Answer Claude Code's questions in your browser instead of the terminal. When Claude Code needs you to choose something, the question opens as a web page with clickable options, visual previews, and a box for your own answer. Your answer goes straight back to Claude Code.
 
-## 架構
+If you switch to the Claude Code mobile app, questions automatically go back to the normal terminal style, so you never miss one.
+
+![askUserQuestion Web screenshot](docs/images/screenshot-en.png)
+
+## What you get
+
+- Questions and options as cards: pick one or several, type your own answer under "Other", or add a note
+- Side-by-side previews: compare layouts, components, or colors as real rendered HTML before choosing
+- A sound and a desktop notification when a new question arrives
+- The page opens by itself when Claude Code has a question, and closes itself after a minute of no new questions
+- English and Traditional Chinese interface
+
+## Install from GitHub
+
+Requires Node.js 20+, git, bash (macOS or WSL on Windows), and Claude Code. No dependencies, no `npm install` needed.
+
+### Let Claude Code install it
+
+Paste this into Claude Code:
+
+```text
+Install the askUserQuestion Web skill by following the README at https://github.com/idben/askUserQuestionWeb
 ```
-Claude ──Write──▶ .auq/outbox/<id>.json ──fs.watch──▶ server.js ──SSE──▶ 瀏覽器
-Claude ◀─Monitor── .auq/server.log ◀──stdout [AUQ]── server.js ◀─POST /api/answer── 瀏覽器
-```
 
-| 檔案 | 用途 |
-|------|------|
-| `server.js` | 零相依的 Node server（只綁 127.0.0.1） |
-| `public/` | 作答頁面（tailwind + daisyUI CDN） |
-| `SKILL.md` | Claude Code skill 說明（啟動、出題、收答、fallback、結束） |
-| `scripts/install-skill.sh` | 安裝成 skill 到 `~/.claude/skills/askuserquestionweb` |
+### Install manually
 
-## 安裝與使用
 ```bash
+git clone https://github.com/idben/askUserQuestionWeb.git
+cd askUserQuestionWeb
 scripts/install-skill.sh
 ```
-在 Claude Code 輸入 `/askuserquestionweb` 或說「啟動 askUserQuestion 網頁版」，開啟回報的網址，按「🔔 啟用通知」。
 
-單獨執行（除錯用）：`node server.js [--port 5700] [--idle-close-sec 60]`；判斷出題方式：`node detect.mjs`
+- Installs to `~/.claude/skills/askuserquestionweb`
+- Update: run `git pull` in the askUserQuestionWeb folder, then run `scripts/install-skill.sh` again
+- Uninstall: `rm -rf ~/.claude/skills/askuserquestionweb`
+- Start a new Claude Code session after installing so the skill is loaded
 
-## 出題方式判斷（detect.mjs）
-Claude Code 沒有提供「目前是否用手機 app」的資訊，先判斷使用者在哪，再看 server 與頁面狀態：
+## Use in Claude Code
 
-比較兩個時間，**較新者勝**：
-- 桌機最後一次鍵盤滑鼠操作：現在 − macOS 系統閒置秒數
-- 最後一則手機訊息：session 紀錄中最後一則使用者訊息有 `queueSkipSlashCommands: true`（手機 app 送出）時的時間戳記
+In your project, type:
 
-手機訊息較新 → 在手機；桌機操作較新或沒有手機訊息 → 在電腦前
+```text
+/askuserquestionweb
+```
 
-| 輸出 | 條件 | Claude 的動作 |
-|------|------|--------------|
-| `classic` | 在手機 | 傳統 AskUserQuestion |
-| `start` | 在電腦前，server 沒在跑 | 重啟 server、開頁、等連線後網頁出題 |
-| `open` | 在電腦前，頁面沒開 | 開頁、等連線後網頁出題 |
-| `web` | 在電腦前，頁面已連線 | 網頁出題（頁面在背景也一樣，靠提示音與通知） |
+or just ask in plain words: "Start askUserQuestion Web".
 
-- 已出題後，只有作答頁面全部關閉 10 秒才自動 fallback；使用者從手機傳訊息時，Claude 撤回網頁題目改用傳統方式重問
-- 最後一題結束後 1 分鐘（`--idle-close-sec`）沒有新題目，頁面自動斷線並嘗試關閉，server 繼續待命
-- 限制：工作中插話與 AskUserQuestion 的回答沒有來源欄位；訊息來源是 Claude Code 內部欄位，改版可能失效
+- Claude Code starts a small local server in the background and opens the answer page in your browser
+- Click "🔔 Enable alerts" once so the page can play a sound and show notifications (browsers only allow sound after you click the page)
+- From then on, whenever Claude Code would ask you something, the question shows up on the page
+- Say "stop askUserQuestion Web" when you're done; Claude Code goes back to asking in the terminal
+- Answers are stored in the project's `.auq/` folder; adding it to `.gitignore` is recommended (Claude Code offers to do this)
+- Add `--port 5700` to choose a port (the default is 5700; the next free port is used if it's taken)
 
-## stdout 標記
-| 標記 | 意義 |
+## On the answer page
+
+| Action | How |
 |------|------|
-| `[AUQ:ready] <url>` | 啟動完成 |
-| `[AUQ:asked] <id>` | 題目已推到頁面（Monitor 不監看） |
-| `[AUQ] answer <id>` + `Q1 [header] 題目 => 答案 \| 備註: ...` | 已作答 |
-| `[AUQ] cancel <id>` | 使用者略過 |
-| `[AUQ] fallback <id> :: <原因>` | 有未答題目時頁面全部關閉，改回傳統 AskUserQuestion |
-| `[AUQ:idle-close]` | 閒置通知頁面關閉（Monitor 不監看） |
-| `[AUQ:error] ...` | 題目格式錯誤或啟動失敗 |
+| Choose | Click an option. "Pick one" questions take a single choice; "Pick any" questions take several |
+| Your own answer | Choose "Other" and type in the box that appears |
+| Add a note | Open "Add a note" under a question |
+| Preview | Hover over an option to see its preview on the right (below the options on narrow screens) |
+| Submit | Click "Submit" or press `Ctrl / ⌘ + Enter` |
+| Skip | Click "Skip" to decline the questions; Claude Code continues without your answer |
+| Switch language | The "中文" / "EN" button at the top right |
 
-## 安全
-- 只綁 `127.0.0.1`；作答 API 檢查 Origin，防止其他網站跨站送出假答案
-- 出題只能透過本機檔案系統，網頁無法偽造題目；題目檔與 body 有大小上限
-- 頁面一律以 `textContent` 呈現題目，避免 XSS；`previewHtml` 放在 `sandbox="allow-scripts"`（無 same-origin）的 iframe，無法存取主頁面與 API
-- 答案只存在本機 `.auq/`（已列入 `.gitignore`）
+- The interface follows your browser language; once you switch, your choice is remembered
+- After you answer, the page closes itself if no new question comes within a minute. It reopens automatically for the next question
+
+## When you're on your phone
+
+The answer page only runs on your computer, so it can't be opened from your phone. Instead, Claude Code checks where you are before each question:
+
+- You sent your latest message from the Claude Code mobile app → the question is asked the normal way, in the app
+- You used your computer's keyboard or mouse more recently → the question goes to the answer page
+
+Keyboard and mouse activity can only be read on macOS. On other systems, Claude Code decides by where your latest message came from.
+
+## Security
+
+- Runs only on your computer (`127.0.0.1`), never exposed to the network or other devices
+- Only the answer page itself can submit answers; other websites can't
+- Questions can only come from files Claude Code writes in your project, so a web page can't fake a question
+- HTML previews run in an isolated frame that can't reach the answer page or your data
+- Answers stay in your project's `.auq/` folder
+
+## License
+
+[MIT](LICENSE)

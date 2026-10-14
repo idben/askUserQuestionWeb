@@ -219,12 +219,12 @@ function publicAsk(record) {
 }
 
 function handleAnswer(req, res) {
-  if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden origin' });
+  if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, code: 'forbidden', error: 'forbidden origin' });
   readJsonBody(req, res, (data) => {
     const ask = pendingAsks.get(data.id);
-    if (!ask) return sendJson(res, 404, { ok: false, error: '題目不存在或已作答' });
+    if (!ask) return sendJson(res, 404, { ok: false, code: 'not_found', error: 'question not found or already answered' });
     const answers = Array.isArray(data.answers) ? data.answers : [];
-    if (answers.length !== ask.questions.length) return sendJson(res, 400, { ok: false, error: '答案數量與題目不符' });
+    if (answers.length !== ask.questions.length) return sendJson(res, 400, { ok: false, code: 'count_mismatch', error: 'answer count does not match questions' });
 
     const clean = [];
     for (const [i, q] of ask.questions.entries()) {
@@ -233,12 +233,12 @@ function handleAnswer(req, res) {
       const selected = Array.isArray(a.selected) ? [...new Set(a.selected.filter((s) => labels.includes(s)))] : [];
       const other = pickText(a.other, 2000) || '';
       const notes = pickText(a.notes, 2000) || '';
-      if (!selected.length && !other) return sendJson(res, 400, { ok: false, error: `第 ${i + 1} 題尚未作答` });
-      if (!q.multiSelect && selected.length + (other ? 1 : 0) > 1) return sendJson(res, 400, { ok: false, error: `第 ${i + 1} 題為單選` });
+      if (!selected.length && !other) return sendJson(res, 400, { ok: false, code: 'unanswered', n: i + 1, error: `question ${i + 1} is unanswered` });
+      if (!q.multiSelect && selected.length + (other ? 1 : 0) > 1) return sendJson(res, 400, { ok: false, code: 'single_only', n: i + 1, error: `question ${i + 1} allows one choice` });
       clean.push({ selected, other, notes });
     }
 
-    if (!finishAsk(ask, 'answered', { answers: clean })) return sendJson(res, 500, { ok: false, error: 'write failed' });
+    if (!finishAsk(ask, 'answered', { answers: clean })) return sendJson(res, 500, { ok: false, code: 'write_failed', error: 'write failed' });
     const output = [`[AUQ] answer ${ask.id} ${ask.questions.length} questions`];
     for (const [i, q] of ask.questions.entries()) {
       const a = clean[i];
@@ -255,12 +255,12 @@ function handleAnswer(req, res) {
 
 // 使用者略過不回答，等同 AskUserQuestion 被拒絕
 function handleCancel(req, res) {
-  if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden origin' });
+  if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, code: 'forbidden', error: 'forbidden origin' });
   readJsonBody(req, res, (data) => {
     const ask = pendingAsks.get(data.id);
-    if (!ask) return sendJson(res, 404, { ok: false, error: '題目不存在或已作答' });
+    if (!ask) return sendJson(res, 404, { ok: false, code: 'not_found', error: 'question not found or already answered' });
     const reason = pickText(data.reason, 1000) || '';
-    if (!finishAsk(ask, 'cancelled', { reason })) return sendJson(res, 500, { ok: false, error: 'write failed' });
+    if (!finishAsk(ask, 'cancelled', { reason })) return sendJson(res, 500, { ok: false, code: 'write_failed', error: 'write failed' });
     console.log(`[AUQ] cancel ${ask.id}${reason ? ` :: ${oneLine(reason)}` : ''}`);
     sendJson(res, 200, { ok: true });
   });
@@ -297,10 +297,10 @@ function oneLine(text) {
 
 // 頁面回報可見狀態 (Page Visibility API)
 function handlePresence(req, res) {
-  if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, error: 'forbidden origin' });
+  if (!isSameOrigin(req)) return sendJson(res, 403, { ok: false, code: 'forbidden', error: 'forbidden origin' });
   readJsonBody(req, res, (data) => {
     const client = clients.get(data.cid);
-    if (!client) return sendJson(res, 404, { ok: false, error: 'unknown client' });
+    if (!client) return sendJson(res, 404, { ok: false, code: 'unknown_client', error: 'unknown client' });
     client.visible = data.visible === true;
     presenceChanged();
     sendJson(res, 200, { ok: true });
@@ -425,7 +425,7 @@ function readJsonBody(req, res, callback) {
   req.on('data', (chunk) => {
     size += chunk.length;
     if (size > maxBody) {
-      sendJson(res, 413, { ok: false, error: 'payload too large' });
+      sendJson(res, 413, { ok: false, code: 'too_large', error: 'payload too large' });
       req.destroy();
       return;
     }
@@ -437,7 +437,7 @@ function readJsonBody(req, res, callback) {
     try {
       data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     } catch {
-      return sendJson(res, 400, { ok: false, error: 'invalid json' });
+      return sendJson(res, 400, { ok: false, code: 'invalid_json', error: 'invalid json' });
     }
     callback(data && typeof data === 'object' ? data : {});
   });

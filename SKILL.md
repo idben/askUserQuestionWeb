@@ -1,7 +1,7 @@
 ---
 name: askuserquestionweb
 argument-hint: [--port 5700] [--idle-close-sec 60]
-description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 .auq/outbox/，使用者在網頁點選 (支援 preview 分欄、Other 自填、備註、通知音效)，答案透過 Monitor 回到 Claude Code。當使用者說「啟動 askUserQuestion 網頁版」「askuserquestionweb」「網頁問答」「改用網頁回答問題」「在瀏覽器回答 AskUserQuestion」等情境時觸發。使用者不在電腦前 (例：改用 Claude Code 手機 app) 時自動改回傳統 AskUserQuestion。
+description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 .auq/outbox/，使用者在網頁點選 (支援 preview 分欄、Other 自填、備註、通知音效)，答案透過 Monitor 回到 Claude Code。當使用者說「啟動 askUserQuestion 網頁版」「askuserquestionweb」「網頁問答」「改用網頁回答問題」「在瀏覽器回答 AskUserQuestion」等情境時觸發；英文如 "start askUserQuestion Web"、"answer questions in the browser"、"ask me in the browser" 也觸發。使用者不在電腦前 (例：改用 Claude Code 手機 app) 時自動改回傳統 AskUserQuestion。
 ---
 
 # askUserQuestion Web：瀏覽器作答 → Claude Code
@@ -16,7 +16,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    ```
    - port 預設 5700，被占用時自動往後找
    - `--idle-close-sec`：最後一題結束後多久沒有新題目就關閉作答頁面（server 繼續待命），預設 60 秒
-2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，提醒按「🔔 啟用通知」（瀏覽器要求點過頁面才能播放提示音）；出現 `[AUQ:error]` 就回報原因
+2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，提醒按「🔔 啟用通知」（英文介面為「🔔 Enable alerts」）（瀏覽器要求點過頁面才能播放提示音）；出現 `[AUQ:error]` 就回報原因
 3. **開始監看**（Monitor，`timeout_ms` 設最大值）：
    ```bash
    tail -n 0 -f .auq/server.log | grep -E --line-buffered "^\[AUQ\]|\[AUQ:error\]"
@@ -89,4 +89,4 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 
 ## 結束
 
-使用者說結束或不再需要時，停止 server 背景工作與 Monitor（TaskStop），之後恢復使用傳統 AskUserQuestion。
+使用者說結束或不再需要時（例：「結束 askUserQuestion 網頁版」、"stop askUserQuestion Web"），停止 server 背景工作與 Monitor（TaskStop），之後恢復使用傳統 AskUserQuestion。

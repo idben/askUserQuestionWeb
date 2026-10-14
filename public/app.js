@@ -3,6 +3,7 @@ const asksBox = document.querySelector('[data-asks]');
 const emptyBox = document.querySelector('[data-empty]');
 const connBadge = document.querySelector('[data-conn]');
 const notifyBtn = document.querySelector('[data-enable-notify]');
+const langBtn = document.querySelector('[data-lang-switch]');
 const tplAsk = document.querySelector('[data-tpl-ask]');
 const tplQuestion = document.querySelector('[data-tpl-question]');
 const tplOption = document.querySelector('[data-tpl-option]');
@@ -22,9 +23,14 @@ const pendingForms = new Map();
 let audioCtx = null;
 let source = null;
 
+applyI18n();
 refreshNotifyBtn();
 connect();
 
+langBtn.addEventListener('click', () => {
+  setLang(getLang() === 'zh-TW' ? 'en' : 'zh-TW');
+  updateState();
+});
 notifyBtn.addEventListener('click', enableNotify);
 // 瀏覽器要求使用者互動後才能播放聲音，第一次點擊頁面就解鎖
 document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -36,11 +42,11 @@ window.addEventListener('message', resizePreview);
 function connect() {
   source = new EventSource(`/events?cid=${cid}&visible=${isVisible() ? 1 : 0}`);
   source.addEventListener('open', () => {
-    setConn('已連線', 'badge-success');
+    setConn('connected', 'badge-success');
     // 重連時網址上的 visible 可能已過時，連上後再回報一次
     sendPresence();
   });
-  source.addEventListener('error', () => setConn('連線中斷，重試中…', 'badge-error'));
+  source.addEventListener('error', () => setConn('disconnected', 'badge-error'));
   source.addEventListener('snapshot', (e) => {
     const asks = JSON.parse(e.data);
     const ids = new Set(asks.map((a) => a.id));
@@ -65,8 +71,8 @@ function connect() {
     const form = pendingForms.get(id);
     // 自己送出的由 fetch 回應處理，避免 SSE 先到而顯示成其他分頁作答
     if (!form || form.dataset.sending) return;
-    const titles = { answered: '已在其他分頁作答', cancelled: '已略過', fallback: '已改回終端機的 AskUserQuestion' };
-    showDone(form, '↪️', titles[status] || '已結束', []);
+    const titles = { answered: 'doneAnswered', cancelled: 'doneCancelled', fallback: 'doneFallback' };
+    showDone(form, '↪️', titles[status] || 'doneOther', []);
   });
   // 閒置太久：先斷線讓 server 知道頁面已離開，再嘗試關閉分頁
   source.addEventListener('idle-close', closeForIdle);
@@ -77,7 +83,7 @@ function closeForIdle() {
   window.close();
   // 瀏覽器不允許關閉時 (分頁不是由腳本開啟)，改顯示提示
   setTimeout(() => {
-    setConn('已閒置關閉', 'badge-ghost');
+    setConn('idleClosed', 'badge-ghost');
     asksBox.replaceChildren();
     pendingForms.clear();
     emptyBox.replaceChildren();
@@ -86,11 +92,11 @@ function closeForIdle() {
     icon.textContent = '💤';
     const text = document.createElement('p');
     text.className = 'text-base-content/70';
-    text.textContent = '閒置一段時間沒有新問題，頁面已停止連線，可以關閉此分頁';
+    setText(text, 'idleText');
     const btn = document.createElement('button');
     btn.className = 'btn btn-sm btn-outline mt-2';
     btn.type = 'button';
-    btn.textContent = '重新連線';
+    setText(btn, 'reconnect');
     btn.addEventListener('click', () => location.reload());
     emptyBox.append(icon, text, btn);
     updateState();
@@ -122,6 +128,7 @@ function renderAsk(ask) {
   });
   form.querySelector('[data-cancel]').addEventListener('click', () => cancelAsk(form, ask));
 
+  applyI18n(form);
   asksBox.append(form);
   pendingForms.set(ask.id, form);
   const first = form.querySelector('[data-input]');
@@ -133,19 +140,22 @@ function renderQuestion(askId, q, qi) {
   const name = `${askId}-q${qi}`;
   const type = q.multiSelect ? 'checkbox' : 'radio';
   fieldset.querySelector('[data-q-header]').textContent = q.header;
-  fieldset.querySelector('[data-q-mode]').textContent = q.multiSelect ? '可複選' : '單選';
+  setText(fieldset.querySelector('[data-q-mode]'), q.multiSelect ? 'multi' : 'single');
   fieldset.querySelector('[data-q-text]').textContent = q.question;
 
   const optionsBox = fieldset.querySelector('[data-options]');
   for (const opt of q.options) {
     optionsBox.append(renderOption({ type, name, value: opt.label, label: opt.label, desc: opt.description }));
   }
-  const otherOpt = renderOption({ type, name, value: otherValue, label: 'Other', desc: '以上都不是，自行輸入' });
+  const otherOpt = renderOption({ type, name, value: otherValue, label: t('otherLabel'), desc: t('otherDesc') });
+  otherOpt.querySelector('[data-opt-label]').dataset.i18n = 'otherLabel';
+  otherOpt.querySelector('[data-opt-desc]').dataset.i18n = 'otherDesc';
   const otherText = document.createElement('textarea');
   otherText.className = 'textarea textarea-bordered w-full hidden';
   otherText.rows = 2;
   otherText.maxLength = 2000;
-  otherText.placeholder = '輸入你的答案';
+  otherText.dataset.i18nPlaceholder = 'otherPlaceholder';
+  otherText.placeholder = t('otherPlaceholder');
   otherText.dataset.other = '';
   optionsBox.append(otherOpt, otherText);
   fieldset.addEventListener('change', () => {
@@ -197,7 +207,7 @@ function setupPreview(fieldset, q) {
     const checked = options.findIndex((o, i) => o.querySelector('input').checked && q.options[i] && hasPreview(q.options[i]));
     const current = target >= 0 ? target : checked >= 0 ? checked : q.options.findIndex(hasPreview);
     const opt = q.options[current];
-    labelEl.textContent = `預覽：${opt.label}`;
+    setText(labelEl, 'previewLabel', { label: opt.label });
     frames.forEach((frame, i) => frame && frame.classList.toggle('hidden', i !== current));
     box.classList.toggle('hidden', Boolean(opt.previewHtml));
     box.textContent = opt.previewHtml ? '' : opt.preview;
@@ -217,7 +227,7 @@ function createPreviewFrame(html) {
   frame.className = 'auq-preview-frame hidden';
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.title = '選項預覽';
+  frame.title = t('previewTitle');
   frame.srcdoc = `<!doctype html><html data-theme="corporate"><head>${previewHead}</head><body>${html}${previewFoot}</body></html>`;
   return frame;
 }
@@ -256,15 +266,16 @@ async function submitAnswer(form, ask) {
   if (!result) return;
   const summary = ask.questions.map((q, i) => {
     const parts = [...answers[i].selected];
-    if (answers[i].other) parts.push(`Other：${answers[i].other}`);
-    return `${q.header}：${parts.join('、')}${answers[i].notes ? `（備註：${answers[i].notes}）` : ''}`;
+    if (answers[i].other) parts.push(t('summaryOther', { text: answers[i].other }));
+    const notes = answers[i].notes ? t('summaryNotes', { text: answers[i].notes }) : '';
+    return `${q.header}${t('summaryColon')}${parts.join(t('summarySep'))}${notes}`;
   });
-  showDone(form, '✅', '已送出，Claude 會繼續處理', summary);
+  showDone(form, '✅', 'sent', summary);
 }
 
 async function cancelAsk(form, ask) {
   const result = await postJson('/api/cancel', { id: ask.id }, form);
-  if (result) showDone(form, '⏭️', '已略過這組問題', []);
+  if (result) showDone(form, '⏭️', 'skipped', []);
 }
 
 async function postJson(url, data, form) {
@@ -280,11 +291,11 @@ async function postJson(url, data, form) {
       body: JSON.stringify(data)
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.ok) throw new Error(json.error || `HTTP ${res.status}`);
+    if (!res.ok || !json.ok) throw new Error(json.code ? t(`err.${json.code}`, { n: json.n }) : json.error || `HTTP ${res.status}`);
     return json;
   } catch (err) {
     if (errorEl) {
-      errorEl.textContent = `送出失敗：${err.message}`;
+      errorEl.textContent = t('submitFailed', { msg: err.message });
       errorEl.classList.remove('hidden');
     }
     if (form) {
@@ -297,10 +308,10 @@ async function postJson(url, data, form) {
 }
 
 // 作答後把卡片換成結果摘要 (不保留歷史，重新整理後就消失)
-function showDone(form, icon, title, lines) {
+function showDone(form, icon, titleKey, lines) {
   const done = tplDone.content.firstElementChild.cloneNode(true);
   done.querySelector('[data-done-icon]').textContent = icon;
-  done.querySelector('[data-done-title]').textContent = title;
+  setText(done.querySelector('[data-done-title]'), titleKey);
   const list = done.querySelector('[data-done-list]');
   for (const line of lines) {
     const li = document.createElement('li');
@@ -323,8 +334,8 @@ function updateState() {
   document.title = pendingForms.size ? `(${pendingForms.size}) askUserQuestion Web` : 'askUserQuestion Web';
 }
 
-function setConn(text, cls) {
-  connBadge.textContent = text;
+function setConn(key, cls) {
+  setText(connBadge, key);
   connBadge.className = `badge badge-sm ${cls}`;
 }
 
@@ -402,7 +413,7 @@ function alertNewAsk(ask) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (isVisible() && document.hasFocus()) return;
   const first = ask.questions[0];
-  const n = new Notification(`Claude 提問：${first.header}`, { body: first.question, tag: ask.id });
+  const n = new Notification(t('notifyTitle', { header: first.header }), { body: first.question, tag: ask.id });
   n.addEventListener('click', () => {
     window.focus();
     n.close();

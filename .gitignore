@@ -1,3 +1,10 @@
 .auq/
 .DS_Store
 node_modules/
+
+# Personal dev workflow and notes (not published)
+.claude/
+plan.md
+task.md
+tasks/
+dev-notes/
