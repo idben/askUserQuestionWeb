@@ -313,6 +313,8 @@ function visibleCount() {
 
 function presenceChanged() {
   if (visibleCount()) lastVisibleAt = new Date().toISOString();
+  // 頁面開著卻沒有題目 (例：server 重啟後頁面自動重連) 也要倒數，否則頁面永遠不會關閉
+  if (clients.size && !pendingAsks.size && !idleCloseTimer) scheduleIdleClose();
   writePresence();
   updateFallback();
 }
