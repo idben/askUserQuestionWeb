@@ -72,11 +72,13 @@ function readPresence() {
   } catch {
     return { running: false };
   }
-  if (!data.running || !data.pid) return { running: false };
+  // pid 必須是正整數：0 與負數會讓 kill 對整個行程群組送訊號而回報成功
+  if (!data.running || !Number.isInteger(data.pid) || data.pid <= 0) return { running: false };
   try {
     process.kill(data.pid, 0);
-  } catch {
-    return { running: false };
+  } catch (err) {
+    // EPERM 代表行程存在但不能送訊號 (例：Claude Code 沙箱模式下每個指令各自隔離)，仍視為執行中
+    if (err.code !== 'EPERM') return { running: false };
   }
   return data;
 }
