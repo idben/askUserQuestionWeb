@@ -49,6 +49,8 @@ fs.mkdirSync(processedDir, { recursive: true });
 loadPending();
 
 const server = http.createServer((req, res) => {
+  // 只接受本機 Host，防止 DNS rebinding 讓外部網頁讀到題目或偽造在場狀態
+  if (!isAllowedHost(req)) return sendText(res, 421, 'Misdirected Request');
   const url = new URL(req.url, `http://${host}:${port}`);
 
   if (url.pathname === '/api/answer' && req.method === 'POST') return handleAnswer(req, res);
@@ -79,20 +81,23 @@ server.on('listening', () => {
   // 啟動前就放進 outbox 的題目一併處理
   for (const name of fs.readdirSync(outboxDir)) scheduleAsk(name);
   updateFallback();
-  fs.watch(outboxDir, (event, name) => {
-    if (name) scheduleAsk(name);
-  });
+  watchOutbox();
 });
 server.listen(port, host);
 
 // 結束時把在場狀態歸零，Claude 讀 presence.json 才不會誤判頁面還開著
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => {
-    clients.clear();
-    writePresence(false);
-    process.exit(0);
-  });
+  process.on(signal, () => process.exit(0));
 }
+process.on('exit', () => {
+  clients.clear();
+  writePresence(false);
+});
+// 未預期的錯誤也要留下標記，Monitor 才會通知 Claude
+process.on('uncaughtException', (err) => {
+  console.error(`[AUQ:error] server 異常結束：${err.message}`);
+  process.exit(1);
+});
 
 // ---------- functions ----------
 
@@ -126,6 +131,36 @@ function readInbox() {
     }
   }
   return records;
+}
+
+// 監看 outbox；沙箱等環境無法使用 fs.watch (例：EMFILE) 時改為每秒輪詢，server 不會因此崩潰
+function watchOutbox() {
+  try {
+    const watcher = fs.watch(outboxDir, (event, name) => {
+      if (name) scheduleAsk(name);
+    });
+    watcher.on('error', (err) => {
+      watcher.close();
+      pollOutbox(err);
+    });
+  } catch (err) {
+    pollOutbox(err);
+  }
+}
+
+function pollOutbox(err) {
+  console.log(`[AUQ:watch] fs.watch 無法使用 (${err.code || err.message})，改為每秒檢查 outbox`);
+  setInterval(() => {
+    let names = [];
+    try {
+      names = fs.readdirSync(outboxDir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (!watchTimers.has(name)) scheduleAsk(name);
+    }
+  }, 1000);
 }
 
 // fs.watch 同一個檔案會觸發多次，debounce 後再讀
@@ -412,6 +447,11 @@ function sendText(res, status, text) {
 function sendJson(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
+}
+
+function isAllowedHost(req) {
+  const hostHeader = String(req.headers.host || '').toLowerCase();
+  return hostHeader === `${host}:${port}` || hostHeader === `localhost:${port}`;
 }
 
 // 只接受本機同源請求，避免其他網站跨站送出假答案

@@ -91,6 +91,7 @@ You can change this. If you pre-approve specific actions in your `CLAUDE.md` (fo
 ## Security
 
 - Runs only on your computer (`127.0.0.1`), never exposed to the network or other devices
+- Rejects requests that use any other host name, which blocks DNS rebinding attacks from web pages
 - Only the answer page itself can submit answers; other websites can't
 - Questions can only come from files Claude Code writes in your project, so a web page can't fake a question
 - HTML previews run in an isolated frame that can't reach the answer page or your data
