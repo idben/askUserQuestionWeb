@@ -88,7 +88,7 @@ textarea {
   white-space: nowrap;
 }
 
-/* ---------- 徽章、按鈕、輸入框 ---------- */
+/* ---------- 徽章、按鈕 (圓角膠囊)、輸入框 ---------- */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -128,9 +128,9 @@ textarea {
   justify-content: center;
   gap: 6px;
   min-height: 44px;
-  padding: 0 18px;
+  padding: 0 22px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 999px;
   background: none;
   font-weight: 600;
   cursor: pointer;
@@ -162,9 +162,13 @@ textarea {
   border-color: var(--text);
 }
 
+.btn-ghost {
+  background-color: var(--bg);
+}
+
 .btn-outline:hover,
 .btn-ghost:hover {
-  background-color: var(--bg);
+  background-color: #e2e5ea;
 }
 
 .btn:focus-visible,
