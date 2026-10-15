@@ -94,6 +94,21 @@ scripts/install-skill.sh
   node ~/.claude/skills/askuserquestionweb/server.js
   ```
 
+若想讓所有步驟都在沙箱內完成，可在 `settings.json` 的 `sandbox` 區塊加上：
+
+```json
+"sandbox": {
+  "enabled": true,
+  "network": { "allowLocalBinding": true },
+  "allowAppleEvents": true,
+  "excludedCommands": ["node *askuserquestionweb/server.js*"]
+}
+```
+
+- `allowLocalBinding`：允許 server 監聽本機 port（只有 macOS 需要）
+- `allowAppleEvents`：允許 Claude Code 用瀏覽器打開作答頁面。開啟後沙箱內的指令可以啟動其他 App，會削弱隔離效果；想自己開頁面就不用設
+- `excludedCommands`：讓 server 在沙箱外執行。這只是方便用的設定，不是安全邊界，執行時仍會經過權限確認
+
 ## 為什麼有些確認會回到終端機
 
 會改動電腦以外東西的動作，例如 `git push`、寫入資料庫、刪除遠端資料，Claude Code 不會把網頁上的回答當作你的同意，因為網頁答案是以背景通知的方式回到 Claude Code。這類情況會改在終端機再確認一次，並帶出你在網頁上已經做的選擇。

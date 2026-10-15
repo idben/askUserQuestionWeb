@@ -94,6 +94,21 @@ If Claude Code runs its commands in a sandbox, some steps may be blocked. askUse
   node ~/.claude/skills/askuserquestionweb/server.js
   ```
 
+To let everything run inside the sandbox instead, add these to the `sandbox` section of your `settings.json`:
+
+```json
+"sandbox": {
+  "enabled": true,
+  "network": { "allowLocalBinding": true },
+  "allowAppleEvents": true,
+  "excludedCommands": ["node *askuserquestionweb/server.js*"]
+}
+```
+
+- `allowLocalBinding`: lets the server listen on a local port (needed on macOS only)
+- `allowAppleEvents`: lets Claude Code open the answer page in your browser. Sandboxed commands can then launch other apps, which weakens the isolation, so skip it if you'd rather open the page yourself
+- `excludedCommands`: runs the server outside the sandbox. This is a convenience, not a security boundary; the command still goes through permission prompts
+
 ## Why some questions come back to the terminal
 
 For actions that change something outside your computer, such as `git push`, writing to a database, or deleting remote data, Claude Code doesn't accept an answer from the web page as your approval, because answers from the page reach Claude Code as background notifications. In those cases Claude Code asks again in the terminal and mentions what you already chose on the page.
