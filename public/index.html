@@ -1,21 +1,19 @@
 <!doctype html>
-<html lang="en" data-theme="corporate">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>askUserQuestion Web</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
-  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
   <link href="/app.css" rel="stylesheet">
 </head>
-<body class="min-h-screen bg-base-200">
-  <header class="navbar bg-base-100 shadow-sm sticky top-0 z-10 px-4">
-    <div class="flex-1 gap-2">
-      <span class="text-lg font-semibold">💬 askUserQuestion</span>
-      <span class="badge badge-sm badge-ghost" data-conn data-i18n="connecting">Connecting…</span>
+<body>
+  <header class="topbar">
+    <div class="topbar-title">
+      <span class="brand">💬 askUserQuestion</span>
+      <span class="badge" data-conn data-i18n="connecting">Connecting…</span>
     </div>
-    <div class="flex gap-2">
+    <div class="topbar-actions">
       <button class="btn btn-sm btn-ghost" data-lang-switch type="button" data-i18n="langSwitch" data-i18n-label="langSwitchLabel">中文</button>
       <button class="btn btn-sm btn-outline" data-enable-notify type="button" data-i18n="enableNotify">🔔 Enable alerts</button>
     </div>
@@ -23,68 +21,66 @@
 
   <main class="auq-main">
     <section class="auq-empty" data-empty>
-      <div class="text-5xl">⏳</div>
-      <p class="text-base-content/70" data-i18n="waiting">Waiting for Claude to ask…</p>
-      <p class="text-sm text-base-content/50" data-i18n="waitingHint"></p>
+      <div class="auq-empty-icon">⏳</div>
+      <p class="muted" data-i18n="waiting">Waiting for Claude to ask…</p>
+      <p class="hint" data-i18n="waitingHint"></p>
     </section>
-    <div class="flex flex-col gap-6" data-asks></div>
+    <div class="auq-asks" data-asks></div>
   </main>
 
   <template data-tpl-ask>
-    <form class="card bg-base-100 shadow auq-ask" novalidate>
-      <div class="card-body gap-6">
-        <div class="flex items-center justify-between text-xs text-base-content/50">
-          <span data-ask-id></span>
-          <time data-ask-time></time>
-        </div>
-        <div class="flex flex-col gap-8" data-questions></div>
-        <p class="text-error text-sm hidden" data-error></p>
-        <div class="card-actions justify-end items-center">
-          <span class="text-xs text-base-content/50 mr-auto auq-hint" data-i18n="submitHint"></span>
-          <button class="btn btn-ghost" type="button" data-cancel data-i18n="skip"></button>
-          <button class="btn btn-primary" type="submit" data-submit disabled data-i18n="submit"></button>
-        </div>
+    <form class="card auq-ask" novalidate>
+      <div class="ask-meta">
+        <span data-ask-id></span>
+        <time data-ask-time></time>
+      </div>
+      <div class="auq-questions" data-questions></div>
+      <p class="error-text hidden" data-error></p>
+      <div class="ask-actions">
+        <span class="hint auq-hint" data-i18n="submitHint"></span>
+        <button class="btn btn-ghost" type="button" data-cancel data-i18n="skip"></button>
+        <button class="btn btn-primary" type="submit" data-submit disabled data-i18n="submit"></button>
       </div>
     </form>
   </template>
 
   <template data-tpl-question>
     <fieldset class="auq-question">
-      <legend class="flex flex-wrap items-center gap-2 mb-3">
-        <span class="badge badge-primary badge-outline" data-q-header></span>
-        <span class="text-xs text-base-content/50" data-q-mode></span>
+      <legend class="question-head">
+        <span class="badge badge-outline" data-q-header></span>
+        <span class="hint" data-q-mode></span>
       </legend>
-      <h2 class="text-base font-semibold mb-3" data-q-text></h2>
+      <h2 class="question-text" data-q-text></h2>
       <div class="auq-body">
-        <div class="flex flex-col gap-2" data-options></div>
+        <div class="auq-options" data-options></div>
         <aside class="auq-preview hidden" data-preview>
-          <div class="text-xs text-base-content/50 mb-1" data-preview-label></div>
+          <div class="hint preview-label" data-preview-label></div>
           <pre class="auq-preview-box" data-preview-box></pre>
         </aside>
       </div>
-      <details class="mt-3">
-        <summary class="text-sm text-base-content/60 cursor-pointer" data-i18n="addNote"></summary>
-        <textarea class="textarea textarea-bordered w-full mt-2" rows="2" maxlength="2000" data-i18n-placeholder="notesPlaceholder" data-notes></textarea>
+      <details class="notes">
+        <summary data-i18n="addNote"></summary>
+        <textarea class="field" rows="2" maxlength="2000" data-i18n-placeholder="notesPlaceholder" data-notes></textarea>
       </details>
     </fieldset>
   </template>
 
   <template data-tpl-option>
     <label class="auq-option">
-      <input class="mt-1" data-input>
-      <span class="flex flex-col gap-1 min-w-0">
-        <span class="font-medium" data-opt-label></span>
-        <span class="text-sm text-base-content/60" data-opt-desc></span>
+      <input class="choice" data-input>
+      <span class="option-text">
+        <span class="option-label" data-opt-label></span>
+        <span class="option-desc" data-opt-desc></span>
       </span>
     </label>
   </template>
 
   <template data-tpl-done>
-    <div class="alert auq-done">
+    <div class="auq-done">
       <span data-done-icon></span>
-      <div class="flex flex-col gap-1 min-w-0">
-        <span class="font-medium" data-done-title></span>
-        <ul class="text-sm text-base-content/70" data-done-list></ul>
+      <div class="option-text">
+        <span class="option-label" data-done-title></span>
+        <ul class="done-list" data-done-list></ul>
       </div>
     </div>
   </template>

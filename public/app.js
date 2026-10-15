@@ -9,11 +9,11 @@ const tplQuestion = document.querySelector('[data-tpl-question]');
 const tplOption = document.querySelector('[data-tpl-option]');
 const tplDone = document.querySelector('[data-tpl-done]');
 const otherValue = '__other__';
+// 預覽不載入任何 CSS 框架，Claude 以 inline style 或 <style> 撰寫；這裡只給基本字型與間距
 const previewHead = [
   '<meta charset="utf-8">',
-  '<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">',
-  '<script src="https://cdn.tailwindcss.com/3.4.16"></script>',
-  '<style>html,body{margin:0;background:transparent}body{padding:12px}</style>'
+  '<style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0;background:transparent}',
+  'body{padding:12px;font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;font-size:14px;line-height:1.5;color:#1f2937}</style>'
 ].join('');
 // 回報內容高度給主頁面，iframe 才能依內容調整高度
 const previewFoot = '<script>new ResizeObserver(() => parent.postMessage({ auqPreviewHeight: document.documentElement.scrollHeight }, "*")).observe(document.documentElement);</script>';
@@ -42,11 +42,11 @@ window.addEventListener('message', resizePreview);
 function connect() {
   source = new EventSource(`/events?cid=${cid}&visible=${isVisible() ? 1 : 0}`);
   source.addEventListener('open', () => {
-    setConn('connected', 'auq-badge-ok');
+    setConn('connected', 'badge-ok');
     // 重連時網址上的 visible 可能已過時，連上後再回報一次
     sendPresence();
   });
-  source.addEventListener('error', () => setConn('disconnected', 'auq-badge-error'));
+  source.addEventListener('error', () => setConn('disconnected', 'badge-error'));
   source.addEventListener('snapshot', (e) => {
     const asks = JSON.parse(e.data);
     const ids = new Set(asks.map((a) => a.id));
@@ -88,13 +88,13 @@ function closeForIdle() {
     pendingForms.clear();
     emptyBox.replaceChildren();
     const icon = document.createElement('div');
-    icon.className = 'text-5xl';
+    icon.className = 'auq-empty-icon';
     icon.textContent = '💤';
     const text = document.createElement('p');
-    text.className = 'text-base-content/70';
+    text.className = 'muted';
     setText(text, 'idleText');
     const btn = document.createElement('button');
-    btn.className = 'btn btn-sm btn-outline mt-2';
+    btn.className = 'btn btn-sm btn-outline';
     btn.type = 'button';
     setText(btn, 'reconnect');
     btn.addEventListener('click', () => location.reload());
@@ -151,7 +151,7 @@ function renderQuestion(askId, q, qi) {
   otherOpt.querySelector('[data-opt-label]').dataset.i18n = 'otherLabel';
   otherOpt.querySelector('[data-opt-desc]').dataset.i18n = 'otherDesc';
   const otherText = document.createElement('textarea');
-  otherText.className = 'textarea textarea-bordered w-full hidden';
+  otherText.className = 'field hidden';
   otherText.rows = 2;
   otherText.maxLength = 2000;
   otherText.dataset.i18nPlaceholder = 'otherPlaceholder';
@@ -174,7 +174,7 @@ function renderOption({ type, name, value, label, desc }) {
   input.type = type;
   input.name = name;
   input.value = value;
-  input.className = `${type === 'radio' ? 'radio' : 'checkbox'} radio-primary checkbox-primary mt-1 shrink-0`;
+  input.className = 'choice';
   el.dataset.label = label;
   el.querySelector('[data-opt-label]').textContent = label;
   const descEl = el.querySelector('[data-opt-desc]');
@@ -188,7 +188,7 @@ function hasPreview(opt) {
 }
 
 // 有 preview 時左右分欄：滑過或聚焦的選項優先，其次是已勾選的，最後是第一個有 preview 的
-// previewHtml 優先於純文字 preview；每個選項一個 iframe，切換時不用重新載入 tailwind
+// previewHtml 優先於純文字 preview；每個選項一個 iframe，切換時不用重新渲染
 function setupPreview(fieldset, q) {
   const body = fieldset.querySelector('.auq-body');
   const pane = fieldset.querySelector('[data-preview]');
@@ -221,14 +221,14 @@ function setupPreview(fieldset, q) {
   show(-1);
 }
 
-// sandbox 只給 allow-scripts、不給 allow-same-origin：預覽可用 tailwind，但無法存取主頁面、cookie 與 API
+// sandbox 只給 allow-scripts (回報高度用)、不給 allow-same-origin：預覽無法存取主頁面、cookie 與 API
 function createPreviewFrame(html) {
   const frame = document.createElement('iframe');
   frame.className = 'auq-preview-frame hidden';
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.title = t('previewTitle');
-  frame.srcdoc = `<!doctype html><html data-theme="corporate"><head>${previewHead}</head><body>${html}${previewFoot}</body></html>`;
+  frame.srcdoc = `<!doctype html><html><head>${previewHead}</head><body>${html}${previewFoot}</body></html>`;
   return frame;
 }
 
@@ -336,7 +336,7 @@ function updateState() {
 
 function setConn(key, cls) {
   setText(connBadge, key);
-  connBadge.className = `badge badge-sm ${cls}`;
+  connBadge.className = `badge ${cls}`;
 }
 
 function isVisible() {

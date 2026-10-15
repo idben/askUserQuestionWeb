@@ -95,6 +95,7 @@ You can change this. If you pre-approve specific actions in your `CLAUDE.md` (fo
 - Only the answer page itself can submit answers; other websites can't
 - Questions can only come from files Claude Code writes in your project, so a web page can't fake a question
 - HTML previews run in an isolated frame that can't reach the answer page or your data
+- No CDN and no CSS framework: the page loads only its own small files, so it works offline and can't be altered by a third-party server
 - Answers stay in your project's `.auq/` folder
 
 ## License

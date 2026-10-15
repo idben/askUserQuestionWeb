@@ -55,7 +55,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
              "label": "左右分欄 (Recommended)",
              "description": "側欄導覽 + 主內容",
              "preview": "Nav | Content",
-             "previewHtml": "<div class=\"flex gap-2 h-32\"><nav class=\"w-1/4 bg-primary/20 rounded p-2\">Nav</nav><main class=\"flex-1 bg-base-200 rounded p-2\">Content</main></div>"
+             "previewHtml": "<div style=\"display:flex;gap:8px;height:120px\"><nav style=\"width:25%;background:#e0e7ff;border-radius:8px;padding:8px\">Nav</nav><main style=\"flex:1;background:#f1f3f6;border-radius:8px;padding:8px\">Content</main></div>"
            },
            { "label": "上下堆疊", "description": "頂部導覽列" }
          ]
@@ -65,7 +65,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    ```
    - 1～4 題，每題 2～4 個選項，`label` 不可重複
    - 預覽（選填，有的話頁面會左右分欄顯示）：
-     - `previewHtml`：**網頁優先顯示這個**。HTML 片段（不含 `<html>`、`<head>`），放在 sandbox iframe 中呈現，已載入 tailwind + daisyUI（主題 corporate），可直接用 class；適合版面、元件、配色等視覺比較
+     - `previewHtml`：**網頁優先顯示這個**。HTML 片段（不含 `<html>`、`<head>`），放在 sandbox iframe 中呈現；**不載入任何 CSS 框架**，用 inline `style` 屬性或 `<style>` 撰寫（已預設 system-ui 字型、14px、內距 12px）；適合版面、元件、配色等視覺比較
      - `preview`：純文字（等寬字型），與 AskUserQuestion 相容；有 `previewHtml` 時也建議附上簡短的文字版，fallback 回傳統 AskUserQuestion 時會用到
      - iframe 無法存取主頁面，不要在 previewHtml 中放機敏資料或外部追蹤資源
    - 不用自己加 Other，頁面每題都會附 Other 自填與備註

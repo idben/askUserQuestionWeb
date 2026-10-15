@@ -1,107 +1,404 @@
+/* askUserQuestion Web 樣式：不使用 CSS 框架，保持零相依與小體積 */
+:root {
+  --bg: #eef0f3;
+  --surface: #fff;
+  --text: #1f2937;
+  --muted: #4b5563;
+  --hint: #6b7280;
+  --border: #d9dde3;
+  --primary: #1d4ed8;
+  --primary-hover: #1e40af;
+  --primary-soft: #eff4ff;
+  --primary-text: #fff;
+  --ok: #15803d;
+  --error: #b91c1c;
+  --preview-bg: #1f2937;
+  --preview-text: #e5e7eb;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.06);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.hint {
+  color: var(--hint);
+  font-size: 0.8rem;
+}
+
+.error-text {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.875rem;
+}
+
+/* ---------- 頁首 ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.topbar-title,
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brand {
+  font-size: 1.05rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- 徽章、按鈕、輸入框 ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.badge-outline {
+  border-color: var(--primary);
+  color: var(--primary);
+  border-radius: 6px;
+}
+
+.badge-ok {
+  background-color: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
+.badge-error {
+  background-color: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+.badge-ghost {
+  background-color: var(--bg);
+  color: var(--muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.btn-sm {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 0.875rem;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--primary-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+  background-color: #c7cdd6;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.btn-outline {
+  border-color: var(--text);
+}
+
+.btn-outline:hover,
+.btn-ghost:hover {
+  background-color: var(--bg);
+}
+
+.btn:focus-visible,
+.field:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.field {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--surface);
+  resize: vertical;
+}
+
+.choice {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--primary);
+}
+
+/* ---------- 版面 ---------- */
 .auq-main {
   max-width: 64rem;
   margin: 0 auto;
-  padding: 1.5rem 1rem 4rem;
-}
-
-/* 主題的 success / error 色配深色字對比不足，改用深色底白字 */
-.auq-badge-ok {
-  background-color: #15803d;
-  border-color: #15803d;
-  color: #fff;
-}
-
-.auq-badge-error {
-  background-color: #b91c1c;
-  border-color: #b91c1c;
-  color: #fff;
+  padding: 24px 16px 64px;
 }
 
 .auq-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  padding: 4rem 1rem;
+  gap: 8px;
+  padding: 64px 16px;
   text-align: center;
+}
+
+.auq-empty p {
+  margin: 0;
+}
+
+.auq-empty-icon {
+  font-size: 3rem;
+}
+
+.auq-asks {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 16px;
+  border-radius: var(--radius);
+  background-color: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .auq-ask {
   animation: auq-in 0.25s ease-out;
 }
 
+.ask-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--hint);
+  font-size: 0.75rem;
+}
+
+.ask-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.auq-hint {
+  display: none;
+  margin-right: auto;
+}
+
+/* ---------- 題目與選項 ---------- */
+.auq-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
 .auq-question {
   min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.question-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0;
+}
+
+.question-text {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .auq-body {
   display: grid;
-  gap: 0.75rem;
+  gap: 12px;
+}
+
+.auq-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .auq-option {
   display: flex;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid oklch(var(--bc) / 0.15);
-  border-radius: var(--rounded-box, 0.5rem);
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   cursor: pointer;
   transition: border-color 0.15s, background-color 0.15s;
 }
 
 .auq-option:hover {
-  border-color: oklch(var(--p) / 0.5);
+  border-color: var(--primary);
 }
 
-.auq-option:has(input:checked) {
-  border-color: oklch(var(--p));
-  background-color: oklch(var(--p) / 0.06);
+.auq-option:has(.choice:checked) {
+  border-color: var(--primary);
+  background-color: var(--primary-soft);
 }
 
-.auq-option:has(input:focus-visible) {
-  outline: 2px solid oklch(var(--p));
+.auq-option:has(.choice:focus-visible) {
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+.option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.option-label {
+  font-weight: 500;
+}
+
+.option-desc {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.notes {
+  margin-top: 12px;
+}
+
+.notes summary {
+  color: var(--muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* ---------- 預覽 ---------- */
+.preview-label {
+  margin-bottom: 4px;
 }
 
 .auq-preview-box {
   margin: 0;
-  padding: 0.75rem 1rem;
+  padding: 12px 16px;
   min-height: 6rem;
   max-height: 24rem;
   overflow: auto;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.8125rem;
   line-height: 1.4;
   white-space: pre;
-  background-color: oklch(var(--n));
-  color: oklch(var(--nc));
-  border-radius: var(--rounded-box, 0.5rem);
+  background-color: var(--preview-bg);
+  color: var(--preview-text);
+  border-radius: var(--radius);
 }
 
 .auq-preview-frame {
   display: block;
   width: 100%;
   height: 8rem;
-  border: 1px solid oklch(var(--bc) / 0.15);
-  border-radius: var(--rounded-box, 0.5rem);
-  background-color: oklch(var(--b1));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--surface);
 }
 
-.auq-preview-frame.hidden {
-  display: none;
-}
-
-.auq-hint {
-  display: none;
-}
-
+/* ---------- 作答結果 ---------- */
 .auq-done {
+  display: flex;
   align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background-color: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.done-list {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 @media (width >= 769px) {
   .auq-main {
-    padding-top: 2rem;
+    padding-top: 32px;
+  }
+
+  .card {
+    padding: 28px 32px;
   }
 
   .auq-body.has-preview {
