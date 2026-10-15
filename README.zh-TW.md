@@ -91,7 +91,7 @@ scripts/install-skill.sh
 - **完全無法在背景執行 server**：在另一個終端機、從你的專案資料夾自行啟動，再告訴 Claude Code 已經啟動：
 
   ```bash
-  node ~/.claude/skills/askuserquestionweb/server.js
+  node ~/.claude/skills/askuserquestionweb/server.js --log .auq/server.log
   ```
 
 若想讓所有步驟都在沙箱內完成，可在 `settings.json` 的 `sandbox` 區塊加上：
@@ -105,7 +105,7 @@ scripts/install-skill.sh
 }
 ```
 
-- `allowLocalBinding`：允許 server 監聽本機 port（只有 macOS 需要）
+- `allowLocalBinding`：在 macOS 允許 server 監聽本機 port。在 Linux 與 WSL2 沒有作用：那裡每個沙箱指令都有自己的網路，瀏覽器連不到沙箱內啟動的 server，請改用 `excludedCommands` 或自行啟動
 - `allowAppleEvents`：允許 Claude Code 用瀏覽器打開作答頁面。開啟後沙箱內的指令可以啟動其他 App，會削弱隔離效果；想自己開頁面就不用設
 - `excludedCommands`：讓 server 在沙箱外執行。這只是方便用的設定，不是安全邊界，執行時仍會經過權限確認
 

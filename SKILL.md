@@ -10,10 +10,10 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 
 ## 啟動
 
-0. **使用者已自行啟動 server 時**（例：沙箱擋背景程式，使用者在另一個終端機執行）：`.auq/presence.json` 的 `running` 為 true 且 pid 存活就跳過第 1 步，從 `.auq/server.log` 最後的 `[AUQ:ready]` 取得網址，照常執行第 3 步開始監看
+0. **使用者已自行啟動 server 時**（例：沙箱擋背景程式，使用者在另一個終端機執行）：`.auq/presence.json` 的 `running` 為 true 且 pid 存活就跳過第 1 步，網址用 `.auq/presence.json` 的 `port` 組成 `http://127.0.0.1:<port>/`，照常執行第 3 步開始監看
 1. **在目前專案根目錄背景執行**（Bash `run_in_background`，Node 依使用者指定的 nvm 環境）：
    ```bash
-   mkdir -p .auq && node <skill>/server.js [--port N] [--close-after-answer-sec N] [--idle-close-sec N] >> .auq/server.log 2>&1
+   node <skill>/server.js --log .auq/server.log [--port N] [--close-after-answer-sec N] [--idle-close-sec N]
    ```
    - port 預設 5700，被占用時自動往後找
    - `--close-after-answer-sec`：作答或略過後多久關閉作答頁面，預設 5 秒
@@ -22,7 +22,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，第一次使用時提醒按「🔔 啟用通知」（英文介面為「🔔 Enable alerts」）允許桌面通知，瀏覽器會記住，之後按鈕不再出現；提示音要點過頁面才會響；出現 `[AUQ:error]` 就回報原因
 3. **開始監看**（Monitor，`timeout_ms` 設最大值）：
    ```bash
-   tail -n 0 -f .auq/server.log | grep -E --line-buffered "^\[AUQ\]|\[AUQ:error\]"
+   tail -n 0 -F .auq/server.log | grep -E --line-buffered "^\[AUQ\]|\[AUQ:error\]"
    ```
    Monitor 到期時重新啟動監看，直到使用者說結束。`tail -n 0` 不會補上空檔期間的輸出，所以重新監看前先執行 `grep -E "^\[AUQ\]|\[AUQ:error\]" .auq/server.log | tail -n 20`，找出空檔中送出、尚未處理的答案（依 id 比對）並先處理
 4. **檢查 `.gitignore`**：目前專案若是 git repo 且 `.gitignore` 沒有 `.auq/`，用 AskUserQuestion 詢問是否加入 (選項：加入 (Recommended) / 不用)（答案內容不應進版控）
@@ -38,7 +38,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    | `open` | 使用者在電腦前，頁面沒開（例：閒置自動關閉） | `open <網址>` 開啟頁面 → 等頁面連線 → 第 2 步 |
    | `start` | 使用者在電腦前，server 沒在跑 | 依「啟動」第 1～3 步重啟 server 與 Monitor → 等頁面連線 → 第 2 步 |
    | `classic` | 使用者在手機上 | **直接用傳統 AskUserQuestion**，不寫 outbox |
-   - 等頁面連線：執行 `node <skill>/detect.mjs --wait-connected 15`（在 Node 內輪詢，不用 shell 的 sleep），輸出 `connected :: N` 就出題；輸出 `timeout :: ...`（exit code 1）就改用傳統 AskUserQuestion
+   - 等頁面連線：執行 `node <skill>/detect.mjs --wait-connected 15`（在 Node 內輪詢；Claude Code 的 Bash 工具不允許前景 sleep），輸出 `connected :: N` 就出題；輸出 `timeout :: ...`（exit code 1）就改用傳統 AskUserQuestion
    - `open` 指令被擋（例：沙箱）時，請使用者手動開啟網址，再執行上面的等待
    - 判斷「使用者在哪」：比較「桌機最後一次鍵盤滑鼠操作」（macOS 系統閒置時間推算）與「最後一則手機訊息」（session 紀錄中 `queueSkipSlashCommands: true`）的時間，**較新者勝**
      - 手機訊息較新 → 在手機

@@ -91,7 +91,7 @@ If Claude Code runs its commands in a sandbox, some steps may be blocked. askUse
 - **The server can't run in the background at all**: start it yourself in another terminal, from your project folder, then tell Claude Code it's running:
 
   ```bash
-  node ~/.claude/skills/askuserquestionweb/server.js
+  node ~/.claude/skills/askuserquestionweb/server.js --log .auq/server.log
   ```
 
 To let everything run inside the sandbox instead, add these to the `sandbox` section of your `settings.json`:
@@ -105,7 +105,7 @@ To let everything run inside the sandbox instead, add these to the `sandbox` sec
 }
 ```
 
-- `allowLocalBinding`: lets the server listen on a local port (needed on macOS only)
+- `allowLocalBinding`: lets the server listen on a local port on macOS. It has no effect on Linux and WSL2, where each sandboxed command gets its own network, so the browser can't reach a server started inside the sandbox. On those systems, rely on `excludedCommands` or start the server yourself
 - `allowAppleEvents`: lets Claude Code open the answer page in your browser. Sandboxed commands can then launch other apps, which weakens the isolation, so skip it if you'd rather open the page yourself
 - `excludedCommands`: runs the server outside the sandbox. This is a convenience, not a security boundary; the command still goes through permission prompts
 

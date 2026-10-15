@@ -88,6 +88,11 @@ textarea {
   white-space: nowrap;
 }
 
+/* 窄螢幕只顯示 💬，讓連線徽章與右側按鈕不重疊 */
+.brand-text {
+  display: none;
+}
+
 /* ---------- 徽章、按鈕 (圓角膠囊)、輸入框 ---------- */
 .badge {
   display: inline-flex;
@@ -133,6 +138,7 @@ textarea {
   border-radius: 999px;
   background: none;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.15s, border-color 0.15s;
 }
@@ -394,6 +400,12 @@ textarea {
   padding-left: 1.2em;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+@media (width >= 480px) {
+  .brand-text {
+    display: inline;
+  }
 }
 
 @media (width >= 769px) {

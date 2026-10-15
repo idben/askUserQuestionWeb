@@ -1,5 +1,6 @@
 // askUserQuestion Web bridge server：Claude 把題目寫進 .auq/outbox/，瀏覽器作答後由 stdout 回報給 Claude Code
-// 用法：node server.js [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60]
+// 用法：node server.js [--log .auq/server.log] [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60]
+// --log：server 自己把輸出追加寫入檔案 (同時印到 stdout)，啟動指令不需要 mkdir 與 >> 導向，沙箱 excludedCommands 才比對得到
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,6 +50,7 @@ let idleCloseTimer = null;
 let lastVisibleAt = null;
 
 fs.mkdirSync(outboxDir, { recursive: true });
+if (args.log) mirrorConsoleToFile(path.resolve(args.log));
 fs.mkdirSync(processedDir, { recursive: true });
 loadPending();
 
@@ -116,6 +118,7 @@ function parseArgs(list) {
     if (list[i] === '--port') result.port = list[++i];
     else if (list[i] === '--idle-close-sec') result.idleCloseSec = list[++i];
     else if (list[i] === '--close-after-answer-sec') result.closeAfterAnswerSec = list[++i];
+    else if (list[i] === '--log') result.log = list[++i];
   }
   return result;
 }
@@ -251,9 +254,10 @@ function toAsk(data) {
     const cleanOptions = [];
     for (const opt of options) {
       // label 與 header 會原樣印進 stdout，壓成一行才不會多出一行假的 [AUQ] 通知
-      const label = oneLine(pickText(opt && opt.label, 100) || '');
+      const label = oneLine(pickText(opt && opt.label, 100) || '').trim();
       if (!label) return { error: `${no}有選項缺少 label` };
       if (label === otherLabel) return { error: `${no}的選項 label 不可為 ${otherLabel} (頁面保留給 Other)` };
+      if (label.toLowerCase() === 'other') return { error: `${no}的選項 label 不可為 Other (頁面每題已自動附上 Other)` };
       if (cleanOptions.some((o) => o.label === label)) return { error: `${no}的選項 label 重複：${label}` };
       cleanOptions.push({
         label,
@@ -262,7 +266,7 @@ function toAsk(data) {
         previewHtml: pickText(opt.previewHtml, 20000, false) || ''
       });
     }
-    questions.push({ header: oneLine(pickText(q.header, 30) || `Q${i + 1}`), question, multiSelect: q.multiSelect === true, options: cleanOptions });
+    questions.push({ header: oneLine(pickText(q.header, 30) || `Q${i + 1}`).trim(), question, multiSelect: q.multiSelect === true, options: cleanOptions });
   }
   return { questions };
 }
@@ -349,8 +353,26 @@ function scheduleIdleClose(delay) {
   }, delay);
 }
 
+// 壓成一行並去掉控制字元 (例：終端機跳脫序列)，避免偽造 [AUQ] 行或干擾 Monitor
 function oneLine(text) {
-  return text.replace(/\s+/g, ' ');
+  return text.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ');
+}
+
+// 同步追加寫入，異常結束前的錯誤訊息也不會遺失
+function mirrorConsoleToFile(file) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  for (const method of ['log', 'error']) {
+    const original = console[method].bind(console);
+    // 先寫檔再印 stdout：看到 stdout 的人 (例：測試、使用者) 讀檔時內容一定已經在裡面
+    console[method] = (...items) => {
+      try {
+        fs.appendFileSync(file, items.join(' ') + '\n');
+      } catch {
+        // 寫不進 log 檔時仍保有 stdout
+      }
+      original(...items);
+    };
+  }
 }
 
 // 頁面回報可見狀態 (Page Visibility API)

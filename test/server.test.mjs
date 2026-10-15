@@ -152,8 +152,9 @@ test('重試解析期間檔案被刪除，之後同名的新題目照常處理',
   const s = await startServer();
   const file = path.join(s.dir, '.auq', 'outbox', 'same.json');
   fs.writeFileSync(file, '{"questions": [');
-  // fs.watch 模式約 120ms、輪詢模式約 1 秒後開始解析，等它進入重試
-  await new Promise((r) => setTimeout(r, 1400));
+  // 等它進入解析重試 (5 次 × 200ms)：fs.watch 模式約 120ms 開始，輪詢模式約 1 秒後開始
+  const polling = /\[AUQ:watch\]/.test(s.log());
+  await new Promise((r) => setTimeout(r, polling ? 1400 : 400));
   fs.unlinkSync(file);
   await new Promise((r) => setTimeout(r, 1500));
   writeAsk(s, 'same', sampleAsk);
@@ -166,6 +167,38 @@ test('JSON 解析錯誤訊息含換行時不能偽造 [AUQ] 行', async () => {
   await s.waitForLog(/\[AUQ:error\] snip\.json :: /, 8000);
   await new Promise((r) => setTimeout(r, 200));
   assert.deepEqual(s.log().split('\n').filter((l) => l.startsWith('[AUQ]')), []);
+});
+
+test('label 不可為 Other（頁面每題已自動附上）', async () => {
+  const s = await startServer();
+  writeAsk(s, 'oth', { questions: [{ question: 'x?', options: [{ label: 'other' }, { label: 'B' }] }] });
+  await s.waitForLog(/\[AUQ:error\] oth\.json :: .*Other/);
+});
+
+test('控制字元不會原樣進入輸出', async () => {
+  const s = await startServer();
+  writeAsk(s, 'ctl', { questions: [{ header: 'H\u001b[2K', question: 'x?', options: [{ label: 'A\u0007' }, { label: 'B' }] }] });
+  await s.waitForLog(/\[AUQ:asked\] ctl/);
+  const res = await request(s, { path: '/api/answer', method: 'POST', body: JSON.stringify({ id: 'ctl', answers: [{ selected: ['A'] }] }) });
+  assert.equal(res.status, 200);
+  await s.waitForLog(/\[AUQ\] answer ctl/);
+  assert.equal(/[\u0000-\u0008\u000b-\u001f\u007f]/.test(s.log()), false);
+});
+
+test('--log 參數會把輸出寫進檔案', async () => {
+  const s = await startServer({ serverArgs: ['--log', '.auq/server.log'] });
+  const logFile = path.join(s.dir, '.auq', 'server.log');
+  assert.match(fs.readFileSync(logFile, 'utf8'), /\[AUQ:ready\]/);
+});
+
+test('detect.mjs：presence.json 內容為 null 時不崩潰', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auq-null-'));
+  fs.mkdirSync(path.join(dir, '.auq'));
+  fs.writeFileSync(path.join(dir, '.auq', 'presence.json'), 'null');
+  const result = await new Promise((resolve) => {
+    execFile(process.execPath, [detectPath, '--wait-connected', '1'], { cwd: dir }, (err, stdout) => resolve({ code: err ? err.code : 0, stdout }));
+  });
+  assert.match(result.stdout, /^timeout :: .*server 未執行/);
 });
 
 // ---------- helpers ----------
@@ -183,10 +216,10 @@ function runDetect(presence) {
 }
 
 // 在暫存資料夾啟動 server (port 0 不可用，從隨機高位 port 開始，被占用時 server 會自動往後找)
-function startServer({ nodeArgs = [] } = {}) {
+function startServer({ nodeArgs = [], serverArgs = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auq-test-'));
   const startPort = 20000 + Math.floor(Math.random() * 20000);
-  const proc = spawn(process.execPath, [...nodeArgs, serverPath, '--port', String(startPort)], { cwd: dir });
+  const proc = spawn(process.execPath, [...nodeArgs, serverPath, '--port', String(startPort), ...serverArgs], { cwd: dir });
   let log = '';
   const waiters = [];
   const onData = (chunk) => {

@@ -2,7 +2,7 @@
 // web：直接寫 outbox；open：先開作答頁面；start：先啟動 server 再開頁面；classic：用傳統 AskUserQuestion
 // 用法：node detect.mjs（在專案根目錄執行，需在 Claude Code 的 Bash 中執行才有 session id）
 //       node detect.mjs --wait-connected [秒]：等作答頁面連線 (預設 15 秒)，輸出 connected :: N 或 timeout :: 原因；
-//       在 Node 內輪詢，不需要 shell 的 sleep (部分沙箱會擋前景 sleep)
+//       在 Node 內輪詢，不需要 shell 的 sleep (Claude Code 的 Bash 工具不允許前景 sleep)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -73,6 +73,7 @@ function readPresence() {
     return { running: false };
   }
   // pid 必須是正整數：0 與負數會讓 kill 對整個行程群組送訊號而回報成功
+  if (!data || typeof data !== 'object') return { running: false };
   if (!data.running || !Number.isInteger(data.pid) || data.pid <= 0) return { running: false };
   try {
     process.kill(data.pid, 0);
