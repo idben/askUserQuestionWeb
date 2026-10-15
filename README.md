@@ -82,6 +82,18 @@ The answer page only runs on your computer, so it can't be opened from your phon
 
 Keyboard and mouse activity can only be read on macOS. On other systems, Claude Code decides by where your latest message came from.
 
+## Running in a sandbox
+
+If Claude Code runs its commands in a sandbox, some steps may be blocked. askUserQuestion Web handles them like this:
+
+- **File watching is blocked**: the server notices and checks for new questions every second instead. Nothing to do on your side
+- **The browser can't be opened automatically**: open `http://127.0.0.1:5700/` yourself (Claude Code shows the address)
+- **The server can't run in the background at all**: start it yourself in another terminal, from your project folder, then tell Claude Code it's running:
+
+  ```bash
+  node ~/.claude/skills/askuserquestionweb/server.js
+  ```
+
 ## Why some questions come back to the terminal
 
 For actions that change something outside your computer, such as `git push`, writing to a database, or deleting remote data, Claude Code doesn't accept an answer from the web page as your approval, because answers from the page reach Claude Code as background notifications. In those cases Claude Code asks again in the terminal and mentions what you already chose on the page.

@@ -10,6 +10,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 
 ## 啟動
 
+0. **使用者已自行啟動 server 時**（例：沙箱擋背景程式，使用者在另一個終端機執行）：`.auq/presence.json` 的 `running` 為 true 且 pid 存活就跳過第 1 步，從 `.auq/server.log` 最後的 `[AUQ:ready]` 取得網址，照常執行第 3 步開始監看
 1. **在目前專案根目錄背景執行**（Bash `run_in_background`，Node 依使用者指定的 nvm 環境）：
    ```bash
    mkdir -p .auq && node <skill>/server.js [--port N] [--close-after-answer-sec N] [--idle-close-sec N] >> .auq/server.log 2>&1
@@ -23,7 +24,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    ```bash
    tail -n 0 -f .auq/server.log | grep -E --line-buffered "^\[AUQ\]|\[AUQ:error\]"
    ```
-   Monitor 到期時重新啟動監看，直到使用者說結束
+   Monitor 到期時重新啟動監看，直到使用者說結束。`tail -n 0` 不會補上空檔期間的輸出，所以重新監看前先執行 `grep -E "^\[AUQ\]|\[AUQ:error\]" .auq/server.log | tail -n 20`，找出空檔中送出、尚未處理的答案（依 id 比對）並先處理
 4. **檢查 `.gitignore`**：目前專案若是 git repo 且 `.gitignore` 沒有 `.auq/`，用 AskUserQuestion 詢問是否加入 (選項：加入 (Recommended) / 不用)（答案內容不應進版控）
 
 ## 出題流程（取代 AskUserQuestion）
@@ -37,7 +38,8 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    | `open` | 使用者在電腦前，頁面沒開（例：閒置自動關閉） | `open <網址>` 開啟頁面 → 等頁面連線 → 第 2 步 |
    | `start` | 使用者在電腦前，server 沒在跑 | 依「啟動」第 1～3 步重啟 server 與 Monitor → 等頁面連線 → 第 2 步 |
    | `classic` | 使用者在手機上 | **直接用傳統 AskUserQuestion**，不寫 outbox |
-   - 等頁面連線：用 Bash（前景，timeout 20 秒）執行 `for i in $(seq 30); do grep -qE '"connected": [1-9]' .auq/presence.json && break; sleep 0.5; done; grep -o '"connected": [0-9]*' .auq/presence.json`；15 秒內沒連上就改用傳統 AskUserQuestion
+   - 等頁面連線：執行 `node <skill>/detect.mjs --wait-connected 15`（在 Node 內輪詢，不用 shell 的 sleep），輸出 `connected :: N` 就出題；輸出 `timeout :: ...`（exit code 1）就改用傳統 AskUserQuestion
+   - `open` 指令被擋（例：沙箱）時，請使用者手動開啟網址，再執行上面的等待
    - 判斷「使用者在哪」：比較「桌機最後一次鍵盤滑鼠操作」（macOS 系統閒置時間推算）與「最後一則手機訊息」（session 紀錄中 `queueSkipSlashCommands: true`）的時間，**較新者勝**
      - 手機訊息較新 → 在手機
      - 桌機操作較新，或沒有手機訊息 → 在電腦前，頁面在背景也照樣用網頁，靠提示音與通知提醒

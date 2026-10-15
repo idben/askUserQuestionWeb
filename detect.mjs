@@ -1,34 +1,62 @@
 // 出題前判斷出題方式，輸出一行 <mode> :: <原因>
 // web：直接寫 outbox；open：先開作答頁面；start：先啟動 server 再開頁面；classic：用傳統 AskUserQuestion
 // 用法：node detect.mjs（在專案根目錄執行，需在 Claude Code 的 Bash 中執行才有 session id）
+//       node detect.mjs --wait-connected [秒]：等作答頁面連線 (預設 15 秒)，輸出 connected :: N 或 timeout :: 原因；
+//       在 Node 內輪詢，不需要 shell 的 sleep (部分沙箱會擋前景 sleep)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const presenceFile = path.resolve('.auq', 'presence.json');
-
-// 先判斷使用者在哪：比較「桌機最後一次鍵盤滑鼠操作」與「最後一則手機訊息」的時間，較新者勝
-const idle = getIdleSeconds();
-const deskAt = idle === null ? null : Date.now() - idle * 1000;
-const message = getLastMessage();
-const mobileAt = message && message.source === 'mobile' ? message.at : null;
-if (mobileAt && (deskAt === null || mobileAt > deskAt)) {
-  finish('classic', `最後一則訊息來自手機 app (${ago(mobileAt)})${deskAt === null ? '' : `，比桌機最後操作 (${ago(deskAt)}) 新`}`);
+const waitIndex = process.argv.indexOf('--wait-connected');
+if (waitIndex !== -1) {
+  waitConnected(Number(process.argv[waitIndex + 1]) || 15);
+} else {
+  detectMode();
 }
-let where = '';
-if (deskAt !== null) where = `桌機最後操作 ${ago(deskAt)}${mobileAt ? `，比手機訊息 (${ago(mobileAt)}) 新` : ''}`;
-else where = message && message.source === 'desktop' ? '最後一則訊息來自電腦' : '無法判斷訊息來源，視為在電腦前';
-
-const presence = readPresence();
-if (!presence.running) finish('start', `${where}；server 未執行`);
-if (!(presence.connected >= 1)) finish('open', `${where}；作答頁面沒開 (port ${presence.port})`);
-finish('web', where);
 
 // ---------- functions ----------
 
+function detectMode() {
+  // 先判斷使用者在哪：比較「桌機最後一次鍵盤滑鼠操作」與「最後一則手機訊息」的時間，較新者勝
+  const idle = getIdleSeconds();
+  const deskAt = idle === null ? null : Date.now() - idle * 1000;
+  const message = getLastMessage();
+  const mobileAt = message && message.source === 'mobile' ? message.at : null;
+  if (mobileAt && (deskAt === null || mobileAt > deskAt)) {
+    finish('classic', `最後一則訊息來自手機 app (${ago(mobileAt)})${deskAt === null ? '' : `，比桌機最後操作 (${ago(deskAt)}) 新`}`);
+  }
+  let where = '';
+  if (deskAt !== null) where = `桌機最後操作 ${ago(deskAt)}${mobileAt ? `，比手機訊息 (${ago(mobileAt)}) 新` : ''}`;
+  else where = message && message.source === 'desktop' ? '最後一則訊息來自電腦' : '無法判斷訊息來源，視為在電腦前';
+
+  const presence = readPresence();
+  if (!presence.running) finish('start', `${where}；server 未執行`);
+  if (!(presence.connected >= 1)) finish('open', `${where}；作答頁面沒開 (port ${presence.port})`);
+  finish('web', where);
+}
+
 function ago(time) {
   return `${Math.max(0, Math.round((Date.now() - time) / 1000))} 秒前`;
+}
+
+// 等頁面連線：每 300ms 讀一次 presence.json，server 必須在執行中
+function waitConnected(seconds) {
+  const deadline = Date.now() + seconds * 1000;
+  const check = () => {
+    const presence = readPresence();
+    if (presence.running && presence.connected >= 1) {
+      console.log(`connected :: ${presence.connected}`);
+      process.exit(0);
+    }
+    if (Date.now() >= deadline) {
+      console.log(`timeout :: ${seconds} 秒內頁面沒有連線${presence.running ? '' : '（server 未執行）'}`);
+      process.exit(1);
+    }
+    setTimeout(check, 300);
+  };
+  check();
 }
 
 function finish(mode, reason) {

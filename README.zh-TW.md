@@ -82,6 +82,18 @@ scripts/install-skill.sh
 
 只有 macOS 能讀取鍵盤滑鼠的使用狀態；其他系統只依你最近一則訊息從哪裡送出來判斷。
 
+## 在沙箱中使用
+
+如果 Claude Code 在沙箱中執行指令，部分步驟可能被擋。askUserQuestion Web 的處理方式：
+
+- **檔案監看被擋**：server 會自動改為每秒檢查一次新題目，你不需要做任何事
+- **無法自動開啟瀏覽器**：自己開啟 `http://127.0.0.1:5700/`（Claude Code 會提供網址）
+- **完全無法在背景執行 server**：在另一個終端機、從你的專案資料夾自行啟動，再告訴 Claude Code 已經啟動：
+
+  ```bash
+  node ~/.claude/skills/askuserquestionweb/server.js
+  ```
+
 ## 為什麼有些確認會回到終端機
 
 會改動電腦以外東西的動作，例如 `git push`、寫入資料庫、刪除遠端資料，Claude Code 不會把網頁上的回答當作你的同意，因為網頁答案是以背景通知的方式回到 Claude Code。這類情況會改在終端機再確認一次，並帶出你在網頁上已經做的選擇。

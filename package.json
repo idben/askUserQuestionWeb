@@ -10,7 +10,8 @@
     "url": "https://github.com/idben/askUserQuestionWeb.git"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/server.test.mjs"
   },
   "engines": {
     "node": ">=20"

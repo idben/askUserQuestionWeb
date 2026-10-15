@@ -39,6 +39,8 @@ const mimeTypes = {
 const sseClients = new Set();
 const pendingAsks = new Map();
 const watchTimers = new Map();
+// 解析重試中的檔名：重試期間不再重複排程，避免同一題被登記兩次
+const retrying = new Set();
 const clients = new Map();
 let fallbackTimer = null;
 let idleCloseTimer = null;
@@ -50,7 +52,12 @@ loadPending();
 
 const server = http.createServer((req, res) => {
   // 只接受本機 Host，防止 DNS rebinding 讓外部網頁讀到題目或偽造在場狀態
-  if (!isAllowedHost(req)) return sendText(res, 421, 'Misdirected Request');
+  if (!isAllowedHost(req)) {
+    // 丟棄請求內容再回應，避免對方還在送資料時連線被切斷
+    req.resume();
+    res.setHeader('Connection', 'close');
+    return sendText(res, 421, 'Misdirected Request');
+  }
   const url = new URL(req.url, `http://${host}:${port}`);
 
   if (url.pathname === '/api/answer' && req.method === 'POST') return handleAnswer(req, res);
@@ -165,7 +172,7 @@ function pollOutbox(err) {
 
 // fs.watch 同一個檔案會觸發多次，debounce 後再讀
 function scheduleAsk(name) {
-  if (!name.endsWith('.json')) return;
+  if (!name.endsWith('.json') || retrying.has(name)) return;
   clearTimeout(watchTimers.get(name));
   watchTimers.set(name, setTimeout(() => {
     watchTimers.delete(name);
@@ -183,11 +190,14 @@ function processAsk(name, attempt) {
     data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (err) {
     if (err instanceof SyntaxError && attempt < parseRetries) {
+      retrying.add(name);
       setTimeout(() => processAsk(name, attempt + 1), 200);
       return;
     }
+    retrying.delete(name);
     return rejectAsk(name, err.message);
   }
+  retrying.delete(name);
 
   const result = toAsk(data);
   if (result.error) return rejectAsk(name, result.error);
@@ -209,13 +219,14 @@ function processAsk(name, attempt) {
   updateFallback();
 }
 
+// 先移走檔案再印錯誤：Claude 看到錯誤時 outbox 已清空，可以直接用同檔名重寫
 function rejectAsk(name, reason) {
-  console.error(`[AUQ:error] ${name} :: ${reason}`);
   try {
     fs.renameSync(path.join(outboxDir, name), path.join(processedDir, name.replace(/\.json$/, '.invalid.json')));
   } catch {
     // 檔案已被移走就不處理
   }
+  console.error(`[AUQ:error] ${name} :: ${reason}`);
 }
 
 // 驗證題目格式 (比照 AskUserQuestion)：1～4 題，每題 2～4 個選項
@@ -465,11 +476,16 @@ function isSameOrigin(req) {
 function readJsonBody(req, res, callback) {
   let size = 0;
   const chunks = [];
+  let tooLarge = false;
   req.on('data', (chunk) => {
+    if (tooLarge) return;
     size += chunk.length;
     if (size > maxBody) {
+      // 回 413 後丟棄剩餘資料，不直接切斷連線，瀏覽器才收得到錯誤回應
+      tooLarge = true;
+      chunks.length = 0;
+      res.setHeader('Connection', 'close');
       sendJson(res, 413, { ok: false, code: 'too_large', error: 'payload too large' });
-      req.destroy();
       return;
     }
     chunks.push(chunk);
