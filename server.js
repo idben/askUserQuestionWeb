@@ -20,6 +20,8 @@ const inboxFile = path.join(dataDir, 'inbox.jsonl');
 const presenceFile = path.join(dataDir, 'presence.json');
 const maxBody = 64 * 1024;
 const maxAskFile = 256 * 1024;
+// 作答頁面用來代表 Other 的值 (public/app.js 的 otherValue)，選項 label 不能用
+const otherLabel = '__other__';
 const parseRetries = 5;
 // 頁面全部關閉多久後改回傳統 AskUserQuestion (頁面在背景不算，靠提示音與通知提醒)
 const noClientFallbackMs = 10 * 1000;
@@ -183,7 +185,11 @@ function scheduleAsk(name) {
 // 讀取 outbox 題目檔，驗證後登記為 pending 並推給頁面；檔案可能還在寫入，解析失敗時重試幾次
 function processAsk(name, attempt) {
   const filePath = path.join(outboxDir, name);
-  if (!fs.existsSync(filePath)) return;
+  if (!fs.existsSync(filePath)) {
+    // 重試期間檔案被刪除或改名：清掉重試標記，之後同名的新檔案才會被處理
+    retrying.delete(name);
+    return;
+  }
   let data;
   try {
     if (fs.statSync(filePath).size > maxAskFile) throw new Error(`檔案超過 ${maxAskFile / 1024}KB`);
@@ -209,7 +215,7 @@ function processAsk(name, attempt) {
     fs.appendFileSync(inboxFile, JSON.stringify(record) + '\n');
     fs.renameSync(filePath, path.join(processedDir, `${id}.json`));
   } catch (err) {
-    return console.error(`[AUQ:error] ${name} :: 寫入失敗 ${err.message}`);
+    return console.error(`[AUQ:error] ${oneLine(name)} :: 寫入失敗 ${oneLine(err.message)}`);
   }
   pendingAsks.set(id, record);
   clearTimeout(idleCloseTimer);
@@ -226,7 +232,8 @@ function rejectAsk(name, reason) {
   } catch {
     // 檔案已被移走就不處理
   }
-  console.error(`[AUQ:error] ${name} :: ${reason}`);
+  // JSON 解析錯誤訊息會帶出檔案內容 (含換行)，檔名也可能含換行，壓成一行才不會多出假的 [AUQ] 通知
+  console.error(`[AUQ:error] ${oneLine(name)} :: ${oneLine(reason)}`);
 }
 
 // 驗證題目格式 (比照 AskUserQuestion)：1～4 題，每題 2～4 個選項
@@ -243,8 +250,10 @@ function toAsk(data) {
     if (options.length < 2 || options.length > 4) return { error: `${no}的 options 需為 2～4 個` };
     const cleanOptions = [];
     for (const opt of options) {
-      const label = pickText(opt && opt.label, 100);
+      // label 與 header 會原樣印進 stdout，壓成一行才不會多出一行假的 [AUQ] 通知
+      const label = oneLine(pickText(opt && opt.label, 100) || '');
       if (!label) return { error: `${no}有選項缺少 label` };
+      if (label === otherLabel) return { error: `${no}的選項 label 不可為 ${otherLabel} (頁面保留給 Other)` };
       if (cleanOptions.some((o) => o.label === label)) return { error: `${no}的選項 label 重複：${label}` };
       cleanOptions.push({
         label,
@@ -253,7 +262,7 @@ function toAsk(data) {
         previewHtml: pickText(opt.previewHtml, 20000, false) || ''
       });
     }
-    questions.push({ header: pickText(q.header, 30) || `Q${i + 1}`, question, multiSelect: q.multiSelect === true, options: cleanOptions });
+    questions.push({ header: oneLine(pickText(q.header, 30) || `Q${i + 1}`), question, multiSelect: q.multiSelect === true, options: cleanOptions });
   }
   return { questions };
 }
@@ -444,7 +453,10 @@ function sendFile(res, filePath) {
     res.writeHead(200, {
       'Content-Type': mimeTypes[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff'
+      'X-Content-Type-Options': 'nosniff',
+      // 禁止其他網站用 iframe 嵌入作答頁面 (誘導點擊、冒充已連線的頁面)
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "frame-ancestors 'none'"
     });
     res.end(data);
   });
