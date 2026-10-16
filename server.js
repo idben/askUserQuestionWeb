@@ -1,11 +1,14 @@
 // askUserQuestion Web bridge server：Claude 把題目寫進 .auq/outbox/，瀏覽器作答後由 stdout 回報給 Claude Code
-// 用法：node server.js [--log .auq/server.log] [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60]
+// 用法：node server.js [--log .auq/server.log] [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60] [--no-auto-open]
 // --log：server 自己把輸出追加寫入檔案 (同時印到 stdout)，啟動指令不需要 mkdir 與 >> 導向，沙箱 excludedCommands 才比對得到
+// --no-auto-open：收到題目但沒有頁面連線時不自動開頁 (預設會判斷使用者在電腦前就開啟)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { whereIsUser } from './presence.mjs';
 
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(appDir, 'public');
@@ -26,6 +29,9 @@ const otherLabel = '__other__';
 const parseRetries = 5;
 // 頁面全部關閉多久後改回傳統 AskUserQuestion (頁面在背景不算，靠提示音與通知提醒)
 const noClientFallbackMs = 10 * 1000;
+// 自動開頁後等頁面連線的時間 (瀏覽器冷啟動較慢)，期間不重複開頁
+const autoOpenWaitMs = 20 * 1000;
+const autoOpen = !args.noAutoOpen;
 // 頁面關閉時機 (server 繼續待命)：作答 / 略過後 Claude 已收到答案，短時間就關；
 // 頁面開著但還沒有題目 (剛自動開頁、server 重啟後重連) 要等 Claude 出題，給較長時間
 const closeAfterAnswerMs = Number(args.closeAfterAnswerSec || 5) * 1000;
@@ -48,6 +54,7 @@ const clients = new Map();
 let fallbackTimer = null;
 let idleCloseTimer = null;
 let lastVisibleAt = null;
+let autoOpenUntil = 0;
 
 fs.mkdirSync(outboxDir, { recursive: true });
 if (args.log) mirrorConsoleToFile(path.resolve(args.log));
@@ -91,6 +98,8 @@ server.on('listening', () => {
   console.log(`[AUQ:ready] http://${host}:${port}/  outbox=${outboxDir}  inbox=${inboxFile}`);
   // 啟動前就放進 outbox 的題目一併處理
   for (const name of fs.readdirSync(outboxDir)) scheduleAsk(name);
+  // server 重啟前留下的未答題目也需要頁面
+  if (pendingAsks.size) autoOpenPage(`${pendingAsks.size} 題未作答`);
   updateFallback();
   watchOutbox();
 });
@@ -119,6 +128,7 @@ function parseArgs(list) {
     else if (list[i] === '--idle-close-sec') result.idleCloseSec = list[++i];
     else if (list[i] === '--close-after-answer-sec') result.closeAfterAnswerSec = list[++i];
     else if (list[i] === '--log') result.log = list[++i];
+    else if (list[i] === '--no-auto-open') result.noAutoOpen = true;
   }
   return result;
 }
@@ -225,6 +235,7 @@ function processAsk(name, attempt) {
   idleCloseTimer = null;
   broadcast('ask', publicAsk(record));
   console.log(`[AUQ:asked] ${id} ${record.questions.length} questions  visible=${visibleCount()} connected=${clients.size}`);
+  autoOpenPage(id);
   updateFallback();
 }
 
@@ -417,14 +428,56 @@ function updateFallback() {
     return;
   }
   if (fallbackTimer) return;
+  // 剛自動開頁時等久一點，讓瀏覽器有時間開啟並連線
+  const delay = Math.max(noClientFallbackMs, autoOpenUntil - Date.now());
   fallbackTimer = setTimeout(() => {
     fallbackTimer = null;
     if (clients.size) return;
-    const reason = '沒有開著的頁面';
-    for (const ask of [...pendingAsks.values()]) {
-      if (finishAsk(ask, 'fallback', { reason })) console.log(`[AUQ] fallback ${ask.id} :: ${reason}，請改用傳統 AskUserQuestion`);
-    }
-  }, noClientFallbackMs);
+    fallbackAll('沒有開著的頁面');
+  }, delay);
+}
+
+function fallbackAll(reason) {
+  clearTimeout(fallbackTimer);
+  fallbackTimer = null;
+  for (const ask of [...pendingAsks.values()]) {
+    if (finishAsk(ask, 'fallback', { reason })) console.log(`[AUQ] fallback ${ask.id} :: ${reason}，請改用傳統 AskUserQuestion`);
+  }
+}
+
+// 有題目卻沒有頁面連線時自動開頁 (Claude 出題前漏開頁面也能作答)：
+// 使用者在電腦前才開；在手機上就立即 fallback，不必等倒數；開頁後 autoOpenWaitMs 內不重複開
+function autoOpenPage(label) {
+  if (!autoOpen || clients.size || !pendingAsks.size || Date.now() < autoOpenUntil) return;
+  const user = whereIsUser();
+  if (user.where === 'mobile') return fallbackAll(`使用者在手機上 (${user.reason})`);
+  const url = `http://${host}:${port}/`;
+  // AUQ_OPEN_COMMAND 供測試替換開頁指令，避免真的開瀏覽器
+  const command = process.env.AUQ_OPEN_COMMAND || (process.platform === 'darwin' ? 'open' : 'xdg-open');
+  autoOpenUntil = Date.now() + autoOpenWaitMs;
+  // 已在倒數的 fallback 改用較長的等待時間重新計算
+  clearTimeout(fallbackTimer);
+  fallbackTimer = null;
+  const onFail = (reason) => {
+    autoOpenUntil = 0;
+    console.log(`[AUQ:warn] 無法自動開啟作答頁面 (${oneLine(reason)})，${noClientFallbackMs / 1000} 秒內沒有頁面連線會改用傳統 AskUserQuestion`);
+    // 倒數改回原本長度
+    clearTimeout(fallbackTimer);
+    fallbackTimer = null;
+    updateFallback();
+  };
+  let child;
+  try {
+    child = spawn(command, [url], { stdio: 'ignore', detached: true });
+  } catch (err) {
+    return onFail(err.message);
+  }
+  child.on('error', (err) => onFail(err.code || err.message));
+  child.on('exit', (code) => {
+    if (code) onFail(`${command} 結束碼 ${code}`);
+  });
+  child.unref();
+  console.log(`[AUQ:auto-open] ${oneLine(String(label))} ${url}  ${oneLine(user.reason)}`);
 }
 
 function handleEvents(req, res, url) {

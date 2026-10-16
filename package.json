@@ -1,6 +1,6 @@
 {
   "name": "ask-user-question-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Answer Claude Code's AskUserQuestion in your browser",

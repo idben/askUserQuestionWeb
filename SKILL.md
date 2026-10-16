@@ -1,24 +1,25 @@
 ---
 name: askuserquestionweb
-argument-hint: [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60]
+argument-hint: [--port 5700] [--close-after-answer-sec 5] [--idle-close-sec 60] [--no-auto-open]
 description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 .auq/outbox/，使用者在網頁點選 (支援 preview 分欄、Other 自填、備註、通知音效)，答案透過 Monitor 回到 Claude Code。當使用者說「啟動 askUserQuestion 網頁版」「askuserquestionweb」「網頁問答」「改用網頁回答問題」「在瀏覽器回答 AskUserQuestion」等情境時觸發；英文如 "start askUserQuestion Web"、"answer questions in the browser"、"ask me in the browser" 也觸發。使用者不在電腦前 (例：改用 Claude Code 手機 app) 時自動改回傳統 AskUserQuestion。
 ---
 
 # askUserQuestion Web：瀏覽器作答 → Claude Code
 
-本 skill 所在路徑（下稱 `<skill>`）即為安裝資料夾，`server.js`、`detect.mjs` 與 `public/` 都在這裡。所有指令用 `<skill>/server.js` 組出路徑，不要寫死。
+本 skill 所在路徑（下稱 `<skill>`）即為安裝資料夾，`server.js`、`detect.mjs`、`presence.mjs` 與 `public/` 都在這裡。所有指令用 `<skill>/server.js` 組出路徑，不要寫死。
 
 ## 啟動
 
 0. **使用者已自行啟動 server 時**（例：沙箱擋背景程式，使用者在另一個終端機執行）：`.auq/presence.json` 的 `running` 為 true 且 pid 存活就跳過第 1 步，網址用 `.auq/presence.json` 的 `port` 組成 `http://127.0.0.1:<port>/`，照常執行第 3 步開始監看
 1. **在目前專案根目錄背景執行**（Bash `run_in_background`，Node 依使用者指定的 nvm 環境）：
    ```bash
-   node <skill>/server.js --log .auq/server.log [--port N] [--close-after-answer-sec N] [--idle-close-sec N]
+   node <skill>/server.js --log .auq/server.log [--port N] [--close-after-answer-sec N] [--idle-close-sec N] [--no-auto-open]
    ```
    - port 預設 5700，被占用時自動往後找
    - `--close-after-answer-sec`：作答或略過後多久關閉作答頁面，預設 5 秒
    - `--idle-close-sec`：頁面開著但還沒有題目時（剛自動開頁、server 重啟後重連）多久關閉，預設 60 秒
    - 兩者關閉的都只是頁面，server 繼續待命
+   - 自動開頁 (預設開啟)：收到題目但沒有頁面連線時，server 判斷使用者在電腦前就自己開啟作答頁面 (log 為 `[AUQ:auto-open]`)，在手機上就立即 fallback；使用者不想自動開頁時加 `--no-auto-open`
 2. **確認啟動並開啟頁面**：等 `.auq/server.log` 出現 `[AUQ:ready]`，取得網址後執行 `open <網址>`（macOS；Linux 用 `xdg-open`）自動開啟作答頁面，並告訴使用者網址，第一次使用時提醒按「🔔 啟用通知」（英文介面為「🔔 Enable alerts」）允許桌面通知，瀏覽器會記住，之後按鈕不再出現；提示音要點過頁面才會響；出現 `[AUQ:error]` 就回報原因
 3. **開始監看**（Monitor，`timeout_ms` 設最大值）：
    ```bash
@@ -40,6 +41,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
    | `classic` | 使用者在手機上 | **直接用傳統 AskUserQuestion**，不寫 outbox |
    - 等頁面連線：執行 `node <skill>/detect.mjs --wait-connected 15`（在 Node 內輪詢；Claude Code 的 Bash 工具不允許前景 sleep），輸出 `connected :: N` 就出題；輸出 `timeout :: ...`（exit code 1）就改用傳統 AskUserQuestion
    - `open` 指令被擋（例：沙箱）時，請使用者手動開啟網址，再執行上面的等待
+   - 出題前仍要先跑 detect.mjs；漏跑而頁面沒開時，server 會自動開頁並等 20 秒，開不了會印 `[AUQ:warn] 無法自動開啟作答頁面`，10 秒內仍沒有頁面就 fallback
    - 判斷「使用者在哪」：比較「桌機最後一次鍵盤滑鼠操作」（macOS 系統閒置時間推算）與「最後一則手機訊息」（session 紀錄中 `queueSkipSlashCommands: true`）的時間，**較新者勝**
      - 手機訊息較新 → 在手機
      - 桌機操作較新，或沒有手機訊息 → 在電腦前，頁面在背景也照樣用網頁，靠提示音與通知提醒
@@ -82,7 +84,7 @@ description: 把 AskUserQuestion 改在瀏覽器作答：Claude 把題目寫進 
 | `[AUQ] answer <id> N questions` + 每題一行 `Q1 [header] 題目 => 答案 \| 備註: ...` | 使用者已作答 | 當成 AskUserQuestion 的回答繼續工作；`Other: ...` 是自填答案 |
 | `[AUQ] cancel <id>` | 使用者按「略過」 | 等同拒絕回答，依情境用預設做法或在對話中詢問 |
 | `[AUQ] cancel <id> :: claude-reask` | Claude 自己撤回（見下方） | 忽略 |
-| `[AUQ] fallback <id> :: <原因>` | 有未答題目時作答頁面全部關閉超過 10 秒 | **立即用傳統 AskUserQuestion 重問同一組題目**（previewHtml 改用 preview 文字版） |
+| `[AUQ] fallback <id> :: <原因>` | 有未答題目時作答頁面全部關閉超過 10 秒 (自動開頁後為 20 秒)，或 server 判斷使用者在手機上 | **立即用傳統 AskUserQuestion 重問同一組題目**（previewHtml 改用 preview 文字版） |
 | `[AUQ:error] <檔名> :: <原因>` | 題目格式錯誤（檔案已移到 `.auq/processed/*.invalid.json`） | 修正後用新檔名重寫 |
 
 - **題目已送到網頁，但使用者從手機傳訊息來**（例：「我在手機」「看不到題目」），或在等待中重新執行 detect.mjs 得到 `classic`：撤回網頁題目後用傳統 AskUserQuestion 重問（port 取自 `[AUQ:ready]` 那一行）：

@@ -53,10 +53,11 @@ or just ask in plain words: "Start askUserQuestion Web".
 
 - Claude Code starts a small local server in the background and opens the answer page in your browser
 - Click "🔔 Enable alerts" the first time to allow desktop notifications; the browser remembers it. A sound also plays for new questions once you've clicked anywhere on the page
-- From then on, whenever Claude Code would ask you something, the question shows up on the page
+- From then on, whenever Claude Code would ask you something, the question shows up on the page; if the page has closed and you're at your computer, it reopens automatically
 - Say "stop askUserQuestion Web" when you're done; Claude Code goes back to asking in the terminal
 - Answers are stored in the project's `.auq/` folder; adding it to `.gitignore` is recommended (Claude Code offers to do this)
 - Add `--port 5700` to choose a port (the default is 5700; the next free port is used if it's taken)
+- Add `--no-auto-open` to stop the page from reopening on its own; questions are then asked in the terminal when the page isn't open
 
 ## On the answer page
 

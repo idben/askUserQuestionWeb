@@ -12,6 +12,9 @@ const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const serverPath = path.join(rootDir, 'server.js');
 const detectPath = path.join(rootDir, 'detect.mjs');
 const servers = [];
+// 假的開頁指令：把網址寫進 AUQ_TEST_OPEN_LOG，測試不會真的開瀏覽器
+const fakeOpen = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'auq-open-')), 'open.sh');
+fs.writeFileSync(fakeOpen, '#!/bin/sh\necho "$1" >> "$AUQ_TEST_OPEN_LOG"\n', { mode: 0o755 });
 const sampleAsk = { questions: [{ header: 'Pick', question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] }] };
 
 after(() => {
@@ -201,7 +204,54 @@ test('detect.mjs：presence.json 內容為 null 時不崩潰', async () => {
   assert.match(result.stdout, /^timeout :: .*server 未執行/);
 });
 
+test('自動開頁：沒有頁面連線時開啟作答頁面，等待期間不重複開', async () => {
+  const s = await startServer();
+  writeAsk(s, 'auto1', sampleAsk);
+  await s.waitForLog(/\[AUQ:auto-open\] auto1 http:\/\/127\.0\.0\.1:\d+\//);
+  writeAsk(s, 'auto2', sampleAsk);
+  await s.waitForLog(/\[AUQ:asked\] auto2/);
+  await waitFor(() => fs.existsSync(path.join(s.dir, 'opened.log')));
+  assert.deepEqual(fs.readFileSync(path.join(s.dir, 'opened.log'), 'utf8').trim().split('\n'), [`http://127.0.0.1:${s.port}/`]);
+  assert.doesNotMatch(s.log(), /\[AUQ\] fallback/);
+});
+
+test('自動開頁：使用者在手機上時立即 fallback，不開頁', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'auq-home-'));
+  const sessionId = 'test-session';
+  fs.mkdirSync(path.join(home, '.claude', 'projects', 'p'), { recursive: true });
+  // 時間設在未來，一定比桌機最後操作新
+  const message = { type: 'user', origin: { kind: 'human' }, queueSkipSlashCommands: true, timestamp: new Date(Date.now() + 60000).toISOString() };
+  fs.writeFileSync(path.join(home, '.claude', 'projects', 'p', `${sessionId}.jsonl`), JSON.stringify(message) + '\n');
+  const s = await startServer({ env: { HOME: home, CLAUDE_CODE_SESSION_ID: sessionId } });
+  writeAsk(s, 'mobile1', sampleAsk);
+  await s.waitForLog(/\[AUQ\] fallback mobile1 :: 使用者在手機上/, 3000);
+  assert.equal(fs.existsSync(path.join(s.dir, 'opened.log')), false);
+});
+
+test('自動開頁：開頁指令失敗時印 [AUQ:warn]', async () => {
+  const s = await startServer({ env: { AUQ_OPEN_COMMAND: path.join(os.tmpdir(), 'auq-no-such-command') } });
+  writeAsk(s, 'fail1', sampleAsk);
+  await s.waitForLog(/\[AUQ:warn\] 無法自動開啟作答頁面/);
+});
+
+test('--no-auto-open：不自動開頁', async () => {
+  const s = await startServer({ serverArgs: ['--no-auto-open'] });
+  writeAsk(s, 'noauto1', sampleAsk);
+  await s.waitForLog(/\[AUQ:asked\] noauto1/);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.doesNotMatch(s.log(), /\[AUQ:auto-open\]/);
+  assert.equal(fs.existsSync(path.join(s.dir, 'opened.log')), false);
+});
+
 // ---------- helpers ----------
+
+async function waitFor(check, ms = 3000) {
+  const deadline = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error('waitFor 逾時');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
 
 // 在暫存資料夾放好 presence.json 後執行 detect.mjs；拿掉 session id，避免讀到實際對話紀錄而判成手機
 function runDetect(presence) {
@@ -216,10 +266,13 @@ function runDetect(presence) {
 }
 
 // 在暫存資料夾啟動 server (port 0 不可用，從隨機高位 port 開始，被占用時 server 會自動往後找)
-function startServer({ nodeArgs = [], serverArgs = [] } = {}) {
+// 預設用假的開頁指令並拿掉 session id (避免讀到實際對話紀錄而判成手機)；env 可覆寫
+function startServer({ nodeArgs = [], serverArgs = [], env = {} } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auq-test-'));
   const startPort = 20000 + Math.floor(Math.random() * 20000);
-  const proc = spawn(process.execPath, [...nodeArgs, serverPath, '--port', String(startPort), ...serverArgs], { cwd: dir });
+  const childEnv = { ...process.env, AUQ_OPEN_COMMAND: fakeOpen, AUQ_TEST_OPEN_LOG: path.join(dir, 'opened.log'), ...env };
+  if (!env.CLAUDE_CODE_SESSION_ID) delete childEnv.CLAUDE_CODE_SESSION_ID;
+  const proc = spawn(process.execPath, [...nodeArgs, serverPath, '--port', String(startPort), ...serverArgs], { cwd: dir, env: childEnv });
   let log = '';
   const waiters = [];
   const onData = (chunk) => {
